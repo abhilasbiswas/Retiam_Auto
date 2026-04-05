@@ -1,0 +1,403 @@
+:root {
+            --bg-dark: #1e1e1e;
+            --bg-panel: #252526;
+            --bg-section: #2d2d2d;
+            --border: #3e3e42;
+            --accent: #007acc;
+            --accent-hover: #0098ff;
+            --text-main: #cccccc;
+            --text-muted: #858585;
+            --text-highlight: #ffffff;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        #topbar {
+            height: 35px;
+            background: #333333;
+            display: flex;
+            align-items: center;
+            padding: 0 15px;
+            border-bottom: 1px solid var(--border);
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            color: var(--text-highlight);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            z-index: 10;
+        }
+
+        #topbar span {
+            color: var(--accent);
+            margin-right: 5px;
+        }
+
+        #editor-workspace {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        #left-panel {
+            width: 240px;
+            background: var(--bg-panel);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+        }
+
+        #center-workspace {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        #right-panel {
+            width: 320px;
+            background: var(--bg-panel);
+            border-left: 1px solid var(--border);
+            overflow-y: auto;
+            padding: 10px;
+        }
+
+        #viewport-container {
+            flex: 1;
+            background: #111;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            overflow: hidden;
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+
+        canvas#canvas {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            cursor: crosshair;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8);
+        }
+
+        /* GIMBAL OVERLAY */
+        #gimbalCanvas {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            width: 80px;
+            height: 80px;
+            pointer-events: none;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 50%;
+            box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        #timeline-panel {
+            height: 160px;
+            background: var(--bg-panel);
+            border-top: 1px solid var(--border);
+            padding: 10px 15px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-dark);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #4a4a4a;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6a6a6a;
+        }
+
+        h3 {
+            margin: 0 0 10px 0;
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 5px;
+        }
+
+        .panel-section {
+            background: var(--bg-section);
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 10px;
+            border: 1px solid var(--border);
+        }
+
+        .stat {
+            font-family: monospace;
+            font-size: 12px;
+            margin-bottom: 5px;
+            color: var(--text-main);
+        }
+
+        .controls {
+            font-size: 11px;
+            color: var(--text-muted);
+            line-height: 1.8;
+        }
+
+        .key {
+            display: inline-block;
+            background: #3c3c3c;
+            color: #fff;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-weight: bold;
+            margin: 1px;
+            border: 1px solid #555;
+            font-family: monospace;
+            font-size: 10px;
+        }
+
+        .input-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 12px;
+            align-items: center;
+        }
+
+        .input-row input[type=number],
+        .input-row select {
+            width: 120px;
+            background: var(--bg-dark);
+            border: 1px solid #555;
+            color: white;
+            padding: 4px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+            cursor: pointer;
+            outline: none;
+        }
+
+        .input-row input[type=number] {
+            width: 60px;
+        }
+
+        .input-row select:hover {
+            border-color: var(--accent);
+        }
+
+        .input-row input[type=range] {
+            flex-grow: 1;
+            margin: 0 10px;
+            cursor: pointer;
+            accent-color: var(--accent);
+        }
+
+        .val-display {
+            display: inline-block;
+            width: 45px;
+            text-align: right;
+            font-family: monospace;
+            color: var(--text-muted);
+            font-size: 11px;
+        }
+
+        button {
+            width: 100%;
+            padding: 8px;
+            margin-top: 5px;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+            font-size: 12px;
+            letter-spacing: 0.5px;
+        }
+
+        button:hover {
+            background: var(--accent-hover);
+        }
+
+        button:disabled {
+            background: #444 !important;
+            color: #777;
+            cursor: not-allowed;
+        }
+
+        .btn-toggle {
+            background: #3c3c3c;
+            border: 1px solid #555;
+        }
+
+        .btn-toggle:hover {
+            background: #4c4c4c;
+        }
+
+        #btnToggleRT {
+            background: #d32f2f;
+            margin-top: 0;
+        }
+
+        #btnToggleDoF {
+            background: #7b1fa2;
+        }
+
+        /* Scene Graph Hierarchy */
+        .hierarchy-item {
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            margin-bottom: 2px;
+            transition: 0.1s;
+        }
+
+        .hierarchy-item:hover {
+            background: var(--bg-section);
+            color: var(--text-highlight);
+        }
+
+        .hierarchy-icon {
+            margin-right: 8px;
+            color: var(--accent);
+            font-size: 12px;
+            width: 14px;
+            text-align: center;
+        }
+
+        /* Timeline Composer */
+        .timeline-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+            background: var(--bg-section);
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+        }
+
+        .btn-icon {
+            width: 32px;
+            height: 32px;
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            border-radius: 4px;
+            padding: 0;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: 0.2s;
+            margin-top: 0;
+        }
+
+        .btn-icon:hover {
+            background: var(--border);
+            color: var(--accent);
+        }
+
+        .btn-icon.active {
+            background: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+
+        #scrubber {
+            flex: 1;
+            margin: 0 15px;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+
+        #timeDisplay {
+            font-family: monospace;
+            font-size: 13px;
+            color: var(--accent);
+            min-width: 55px;
+            text-align: right;
+            font-weight: bold;
+        }
+
+        #progressContainer {
+            display: none;
+            margin-top: 5px;
+        }
+
+        #progressBar {
+            width: 100%;
+            height: 12px;
+            background: var(--bg-dark);
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+
+        #progressFill {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #007acc, #00bcd4);
+            transition: 0.1s;
+            box-shadow: 0 0 10px rgba(0, 188, 212, 0.5);
+        }
+
+        #progressText {
+            font-size: 12px;
+            margin-bottom: 8px;
+            color: var(--text-main);
+            font-family: monospace;
+        }
+
+        /* Additional Timeline Composer Styles */
+        .time-bound {
+            width: 50px !important;
+            text-align: center;
+            font-size: 11px !important;
+            padding: 4px 2px !important;
+            margin: 0 4px;
+            border: 1px solid #555 !important;
+        }
+
+        .speed-select {
+            width: 65px !important;
+            font-size: 11px !important;
+            padding: 4px 2px !important;
+            background: var(--bg-dark);
+            color: white;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: center;
+        }
+
+        .timeline-divider {
+            width: 1px;
+            height: 20px;
+            background: var(--border);
+            margin: 0 6px;
+        }

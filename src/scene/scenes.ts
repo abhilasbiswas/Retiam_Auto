@@ -108,6 +108,12 @@ export class Scene {
     }
 
     async rebuildScene(targetTime = 0) {
+        if (this._isRebuilding) {
+            this._pendingRebuildTime = targetTime;
+            return;
+        }
+        this._isRebuilding = true;
+
         const curCam = this.camera;
         this.mobjects = [];
         this.activeAnimations = [];
@@ -120,7 +126,12 @@ export class Scene {
         this.construct();
 
         if (targetTime > 0) {
+            // Because construct() is async and uses 'await this.play()', javascript's microtask queue
+            // must be allowed to process so construct() can resume and queue up subsequent animations.
+            // By yielding with 'await Promise.resolve()' at each simulation tick, we flush the microtasks
+            // instantly without yielding to the browser's Macrotask paint queue, keeping it incredibly fast.
             const simDt = 1.0 / 60.0;
+            if (this.interactionManager) this.interactionManager.play();
             while (this.clock < targetTime) {
                 let step = Math.min(simDt, targetTime - this.clock);
                 this.clock += step;
@@ -128,7 +139,15 @@ export class Scene {
                 const runUpdaters = (m, dt) => { m.updaters.forEach(fn => fn(m, dt)); if (m.children) m.children.forEach(c => runUpdaters(c, dt)); };
                 this.mobjects.forEach(m => runUpdaters(m, step));
                 if (this.alwaysUpdate) this.alwaysUpdate(step, this.clock);
+                if (this.interactionManager && this.interactionManager.isPlaying) {
+                    this.interactionManager.applyEventsForTime(this.clock, this.mobjects);
+                }
+                
+                // CRITICAL: Yield to JS Microtask Queue so async construct() can advance!
+                await Promise.resolve(); 
             }
+        } else {
+            if (this.interactionManager) this.interactionManager.stop();
         }
 
         if (this.engine) this.engine.bakeMeshes(this.mobjects);
@@ -136,6 +155,14 @@ export class Scene {
         this.frameCount = 0;
         document.getElementById('scrubber').value = this.clock;
         document.getElementById('timeDisplay').innerText = this.clock.toFixed(2) + "s";
+        
+        this._isRebuilding = false;
+        if (this._pendingRebuildTime !== undefined) {
+            const nextTime = this._pendingRebuildTime;
+            this._pendingRebuildTime = undefined;
+            // Fire the next rebuild continuously matching the very latest scrub target
+            this.rebuildScene(nextTime);
+        }
     }
 
     async setup() { }
@@ -474,8 +501,18 @@ export class Scene {
         selSpeed.addEventListener('change', (e) => { this.playbackSpeed = parseFloat(e.target.value); });
 
         let isScrubbing = false;
+        let lastScrubTime = 0;
         scrubber.addEventListener('mousedown', () => { isScrubbing = true; });
-        scrubber.addEventListener('input', (e) => { document.getElementById('timeDisplay').innerText = parseFloat(e.target.value).toFixed(2) + "s"; });
+        scrubber.addEventListener('input', async (e) => { 
+            const val = parseFloat(e.target.value);
+            document.getElementById('timeDisplay').innerText = val.toFixed(2) + "s";
+            
+            const now = Date.now();
+            if (now - lastScrubTime > 100) { // Max 10fps rebuild while dragging to prevent lockups
+                lastScrubTime = now;
+                await this.rebuildScene(val);
+            }
+        });
         scrubber.addEventListener('change', async (e) => {
             isScrubbing = false;
             await this.rebuildScene(parseFloat(e.target.value));

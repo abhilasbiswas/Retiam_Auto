@@ -69,6 +69,7 @@ export class Mobject {
         this.parent = null;
         this.children = [];
         this.isInteractable = false;
+        this.name = '';
     }
 
     // Proxies to keep Engine updates and Animation Timelines working seamlessly
@@ -173,6 +174,11 @@ export class Mobject {
     // --- INTERACTIVITY API ---
     make_interactable(enable = true) {
         this.isInteractable = enable;
+        return this;
+    }
+
+    set_name(n) {
+        this.name = n;
         return this;
     }
 

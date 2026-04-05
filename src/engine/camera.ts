@@ -16,6 +16,8 @@ export class CameraController {
         this.dragInfo = null;
         this.dragMoved = false;
         this.lastMobjects = [];
+        this.recorder = null; // InteractionRecorder reference, set by Scene
+        this.sceneClock = () => 0; // Function to get current scene clock
 
         window.addEventListener('keydown', e => this.keys[e.code] = true);
         window.addEventListener('keyup', e => this.keys[e.code] = false);
@@ -34,6 +36,11 @@ export class CameraController {
                     this.camera.pos[2] + rayDir[2] * hit.distance
                 ];
                 
+                // Record the event
+                if (this.recorder && this.recorder.isRecording && hit.object.name) {
+                    this.recorder.captureEvent('mousedown', this.sceneClock(), hit.object.name, intersectPt, Math3D.normalize([...rayDir]));
+                }
+
                 let consumed = hit.object.onMouseDown(intersectPt, Math3D.normalize([...rayDir]), Math3D.normalize([...this.camera.dir]));
                 
                 if (consumed !== false) {
@@ -43,7 +50,13 @@ export class CameraController {
                         planePt: intersectPt
                     };
                     this.isDragging = true;
-                    return; // Enter interactive dragging state instead of pointer lock
+                    return;
+                } else {
+                    // Click-only event (consumed === false) — still record mouseup immediately
+                    if (this.recorder && this.recorder.isRecording) {
+                        this.recorder.captureEvent('mouseup', this.sceneClock());
+                    }
+                    this.dragMoved = true; // trigger accumulation clear for material changes
                 }
             }
             
@@ -52,8 +65,13 @@ export class CameraController {
 
         document.addEventListener('mouseup', (e) => {
             if (e.button === 0) {
-                if (this.isDragging && this.dragInfo && this.dragInfo.object.onMouseUp) {
-                    this.dragInfo.object.onMouseUp();
+                if (this.isDragging && this.dragInfo) {
+                    if (this.recorder && this.recorder.isRecording) {
+                        this.recorder.captureEvent('mouseup', this.sceneClock());
+                    }
+                    if (this.dragInfo.object.onMouseUp) {
+                        this.dragInfo.object.onMouseUp();
+                    }
                 }
                 this.isDragging = false;
                 this.dragInfo = null;
@@ -88,6 +106,10 @@ export class CameraController {
                     ];
                     
                     if (this.dragInfo.object.onMouseDrag) {
+                        // Record the drag event
+                        if (this.recorder && this.recorder.isRecording && this.dragInfo.object.name) {
+                            this.recorder.captureEvent('mousemove', this.sceneClock(), null, [...newIntersectPt], Math3D.normalize([...rayDir]));
+                        }
                         let objMoved = this.dragInfo.object.onMouseDrag(newIntersectPt, Math3D.normalize([...rayDir]), tHit);
                         if (objMoved !== false) this.dragMoved = true;
                     }

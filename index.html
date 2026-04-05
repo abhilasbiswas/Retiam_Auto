@@ -65,6 +65,20 @@
                         <div id="progressFill"></div>
                     </div>
                 </div>
+
+                <div style="padding: 6px 12px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                    <span style="font-size: 11px; color: var(--text-muted); font-weight: bold;">INTERACT:</span>
+                    <button class="btn-icon" id="btnRecordInteraction" title="Record Interaction">⏺</button>
+                    <button class="btn-icon" id="btnStopRecord" title="Stop Recording" disabled>⏹</button>
+                    <button class="btn-icon" id="btnLoadInteraction" title="Load Interactions Bundle">📂</button>
+                    <button class="btn-icon" id="btnExportInteraction" title="Save All Interactions" disabled>💾</button>
+                    <button class="btn-icon" id="btnClearInteraction" title="Clear All" disabled>🗑</button>
+                    <input type="file" id="fileInteraction" accept=".json" style="display:none;">
+                </div>
+                <!-- Track List -->
+                <div id="interactionTrackList" style="padding: 0 12px 6px 12px; max-height: 100px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px;">
+                    <!-- Auto-populated by JS -->
+                </div>
             </div>
         </div>
 
@@ -246,6 +260,10 @@
                     <div class="input-row"><span>FPS:</span> <input type="number" id="inpFps" value="30"></div>
                     <div class="input-row"><span>Duration (s):</span> <input type="number" id="inpDur" value="15"></div>
                     <div class="input-row"><span>Samples/Frame:</span> <input type="number" id="inpSpp" value="128">
+                    </div>
+                    <div class="input-row">
+                        <span>Use Interaction:</span>
+                        <input type="checkbox" id="chkUseInteraction">
                     </div>
                     <button id="btnRender" style="margin-top: 10px;">Start Offline Render</button>
                 </div>

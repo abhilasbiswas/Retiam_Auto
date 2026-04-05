@@ -2,11 +2,12 @@
 import { Math3D } from "../math/math3d";
 import { RenderEngine } from "../engine/renderEngine";
 import { CameraController } from "../engine/camera";
-import { Mobject, Material, MeshObject, Group, Sphere, ValueTracker, globalVectorAtlas } from "./mobjects";
+import { Mobject, Material, MeshObject, Group, Sphere, ValueTracker, globalVectorAtlas, VideoObject } from "./mobjects";
 import { Animation, Create, FadeIn, FadeOut, MoveCamera, Indicate } from "./animations";
 import { populateSceneGraph, drawGimbal } from "../ui/sceneGraph";
 import { rate_functions } from "../math/rate_functions";
 import { OIDNManager } from "../gpu/oidnManager";
+import { InteractionManager } from "../engine/interactionRecorder";
 
 export class Scene {
     constructor() {
@@ -146,6 +147,11 @@ export class Scene {
         this.oidnManager = new OIDNManager(this.engine);
         this.oidnReady = false; this.isProcessingOIDN = false;
 
+        // --- Interaction Recording/Playback ---
+        this.interactionManager = new InteractionManager();
+        this.cameraController.recorder = this.interactionManager.recorder;
+        this.cameraController.sceneClock = () => this.clock;
+
         // --- NEW: Debounce Window Resizing ---
         let resizeTimeout = null;
         window.addEventListener('resize', () => {
@@ -279,8 +285,133 @@ export class Scene {
 
         document.getElementById('btnRender').addEventListener('click', () => {
             const fps = parseInt(document.getElementById('inpFps').value), dur = parseFloat(document.getElementById('inpDur').value), spp = parseInt(document.getElementById('inpSpp').value);
-            this.startOfflineRender(fps, dur, spp);
+            const useInteraction = document.getElementById('chkUseInteraction').checked;
+            
+            let exportData = null;
+            if (useInteraction && this.interactionManager.tracks.length > 0) {
+                // We bundle the currently active tracks
+                exportData = {
+                    version: 2,
+                    tracks: this.interactionManager.tracks.map(t => ({
+                        name: t.name,
+                        isEnabled: t.isEnabled,
+                        recording: t.recording
+                    }))
+                };
+            }
+            this.startOfflineRender(fps, dur, spp, exportData);
         });
+
+        // --- Interaction Recording UI ---
+        const updateInteractionUI = () => {
+            const hasTracks = this.interactionManager.tracks.length > 0;
+            document.getElementById('btnExportInteraction').disabled = !hasTracks;
+            document.getElementById('btnClearInteraction').disabled = !hasTracks;
+            document.getElementById('chkUseInteraction').checked = hasTracks;
+
+            // Render Track List
+            const trackListEl = document.getElementById('interactionTrackList');
+            trackListEl.innerHTML = '';
+            
+            if (!hasTracks) {
+                trackListEl.innerHTML = '<div style="font-size: 10px; color: #777; text-align: center;">No tracks recorded.</div>';
+                return;
+            }
+
+            this.interactionManager.tracks.forEach((track, index) => {
+                const row = document.createElement('div');
+                row.style.display = 'flex';
+                row.style.alignItems = 'center';
+                row.style.justifyContent = 'space-between';
+                row.style.background = 'rgba(255,255,255,0.05)';
+                row.style.padding = '2px 6px';
+                row.style.borderRadius = '3px';
+                
+                const leftDiv = document.createElement('div');
+                leftDiv.style.display = 'flex';
+                leftDiv.style.alignItems = 'center';
+                leftDiv.style.gap = '6px';
+                
+                const chk = document.createElement('input');
+                chk.type = 'checkbox';
+                chk.checked = track.isEnabled;
+                chk.style.margin = '0';
+                chk.addEventListener('change', (e) => {
+                    track.isEnabled = e.target.checked;
+                });
+                
+                const nameLabel = document.createElement('span');
+                nameLabel.style.fontSize = '11px';
+                nameLabel.style.color = '#ddd';
+                nameLabel.innerText = `${track.name} (${track.recording.eventCount} evts)`;
+                
+                leftDiv.appendChild(chk);
+                leftDiv.appendChild(nameLabel);
+                
+                const delBtn = document.createElement('button');
+                delBtn.innerText = '✖';
+                delBtn.style.background = 'transparent';
+                delBtn.style.border = 'none';
+                delBtn.style.color = '#f44336';
+                delBtn.style.cursor = 'pointer';
+                delBtn.style.fontSize = '10px';
+                delBtn.style.padding = '0 4px';
+                delBtn.title = `Delete ${track.name}`;
+                delBtn.addEventListener('click', () => {
+                    this.interactionManager.tracks.splice(index, 1);
+                    updateInteractionUI();
+                });
+                
+                row.appendChild(leftDiv);
+                row.appendChild(delBtn);
+                trackListEl.appendChild(row);
+            });
+        };
+
+        document.getElementById('btnRecordInteraction').addEventListener('click', () => {
+            this.interactionManager.startRecording(this.clock);
+            document.getElementById('btnRecordInteraction').disabled = true;
+            document.getElementById('btnStopRecord').disabled = false;
+        });
+
+        document.getElementById('btnStopRecord').addEventListener('click', () => {
+            this.interactionManager.stopRecording();
+            document.getElementById('btnRecordInteraction').disabled = false;
+            document.getElementById('btnStopRecord').disabled = true;
+            updateInteractionUI();
+        });
+
+        document.getElementById('btnExportInteraction').addEventListener('click', () => {
+            this.interactionManager.exportAll();
+        });
+
+        document.getElementById('btnLoadInteraction').addEventListener('click', () => {
+            document.getElementById('fileInteraction').click();
+        });
+
+        document.getElementById('fileInteraction').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                try {
+                    this.interactionManager.loadAll(ev.target.result);
+                    updateInteractionUI();
+                } catch (err) {
+                    console.error("Failed to load tracks", err);
+                }
+            };
+            reader.readAsText(file);
+            e.target.value = ''; // Reset so same file can be re-loaded
+        });
+
+        document.getElementById('btnClearInteraction').addEventListener('click', () => {
+            this.interactionManager.clear();
+            updateInteractionUI();
+        });
+
+        // Initialize empty UI
+        updateInteractionUI();
 
         const btnPlay = document.getElementById('btnPlay');
         const btnStop = document.getElementById('btnStop');
@@ -294,11 +425,14 @@ export class Scene {
             this.isPlaying = !this.isPlaying;
             btnPlay.innerText = this.isPlaying ? "⏸" : "▶";
             btnPlay.classList.toggle('active', this.isPlaying);
+            if (this.isPlaying) this.interactionManager.play();
+            else this.interactionManager.stop();
         });
         btnPlay.classList.toggle('active', this.isPlaying);
 
         btnStop.addEventListener('click', () => {
             this.isPlaying = false; btnPlay.innerText = "▶"; btnPlay.classList.remove('active');
+            this.interactionManager.stop();
             this.rebuildScene(0);
         });
 
@@ -394,6 +528,21 @@ export class Scene {
         if (this.cameraController) {
             let safeDt = Math.min(rawDt, 0.1);
             if (this.cameraController.update(safeDt, this.mobjects)) isAnimating = true;
+        }
+
+        // --- Interaction Playback ---
+        if (this.interactionManager && this.interactionManager.isPlaying && !this.interactionManager.isRecording) {
+            // We only apply events here if NOT recording, because if we ARE recording,
+            // the startRecording() has already played everything, but we don't want the 
+            // the live playing tracks to interfere with the live raycast mouse dragging, 
+            // although they don't natively interfere since active mobjects are cleanly separated.
+            // Wait, actually we DO want to apply events during recording so we see other objects move!
+        }
+        
+        if (this.interactionManager && (this.interactionManager.isPlaying || this.interactionManager.isRecording)) {
+            if (this.interactionManager.applyEventsForTime(this.clock, this.mobjects)) {
+                isAnimating = true;
+            }
         }
 
         if (isAnimating || this.isScrubbing()) {
@@ -496,8 +645,16 @@ export class Scene {
         this.frameCount++; requestAnimationFrame(async t => await this._loop(t));
     }
 
-    async startOfflineRender(fps, duration, targetSpp) {
+    async startOfflineRender(fps, duration, targetSpp, interactionData = null) {
         window.isRenderingVideo = true;
+
+        // Set up InteractionManager for offline render if provided
+        let offlineManager = null;
+        if (interactionData) {
+            offlineManager = new InteractionManager();
+            offlineManager.loadAll(interactionData);
+            offlineManager.play();
+        }
 
         // --- FORCE CLASSIC PATH TRACING FOR OFFLINE CLARITY ---
         const originalTechnique = this.engine.rtTechnique;
@@ -581,6 +738,11 @@ export class Scene {
             const runUpdaters = (m, dt) => { m.updaters.forEach(fn => fn(m, dt)); if (m.children) m.children.forEach(c => runUpdaters(c, dt)); };
             this.mobjects.forEach(m => runUpdaters(m, dt));
             if (this.alwaysUpdate) this.alwaysUpdate(dt, this.clock);
+
+            // Apply recorded interactions for this frame
+            if (offlineManager && offlineManager.isPlaying) {
+                offlineManager.applyEventsForTime(this.clock, this.mobjects);
+            }
 
             let accFrame = 0;
             const passes = Math.ceil(targetSpp / 4);
@@ -900,14 +1062,14 @@ export class VoxelRoomScene extends Scene {
         // 1. Blue Glass Cube
         this.cube1 = new Box(1.2, 1.2, 1.2, [0.4, 0.7, 1.0]);
         this.cube1.position = [4.0, 0.6, 1.0];
-        this.cube1.make_interactable();
+        this.cube1.make_interactable().set_name('cube1');
         // Parameters: color, smoothness, transparency, ior
         this.cube1.set_material([0.4, 0.7, 1.0], 1.0, 0.9, 1.5);
 
         // 2. Red Glass Cube
         this.cube2 = new Box(0.9, 0.9, 0.9, [1.0, 0.4, 0.4]);
         this.cube2.position = [3.8, 1.65, 0.9];
-        this.cube2.make_interactable();
+        this.cube2.make_interactable().set_name('cube2');
         // Using transparency of 0.9 makes it clear glass, IOR of 1.5 is the physical constant for glass
         this.cube2.set_material([1.0, 0.4, 0.4], 1.0, 0.9, 1.5);
 
@@ -916,7 +1078,7 @@ export class VoxelRoomScene extends Scene {
         this.deskLamp = new Sphere(0.35);
         this.deskLamp.position = [-4.8, 3.55, 2.5];
         this.deskLamp.set_material([1.0, 0.9, 0.7], 0.9, 0.0, 1.5, [1.0, 0.85, 0.6], 4.0);
-        this.deskLamp.make_interactable();
+        this.deskLamp.make_interactable().set_name('deskLamp');
 
         // Custom Y-axis-only drag: Moving the lamp up increases emission, down dims it
         this.deskLamp.onMouseDown = (pt, rayDir) => {

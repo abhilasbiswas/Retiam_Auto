@@ -574,3 +574,64 @@ closest.mat.metallic = mesh.mat2.w; // <- NEW
                 return baseSky * cam.skyData.w;
             }
         
+fn evaluateFallbackShading(
+    gb_p: vec4<f32>, 
+    gb_n: vec4<f32>, 
+    gb_a: vec4<f32>, 
+    cameraRayOrigin: vec3<f32>,
+    dirToScreen: vec3<f32>,
+    metallic: f32,
+    rngState: ptr<function, u32>
+) -> vec4<f32> {
+    if (gb_a.a < -0.5) {
+        let ray = Ray(cameraRayOrigin, dirToScreen, 1.0 / dirToScreen);
+        return vec4<f32>(getSkyColor(ray), 1.0);
+    }
+    
+    let N = normalize(gb_n.xyz); let V = -dirToScreen;
+    let R = reflect(-V, N);
+    
+    let L1 = normalize(vec3<f32>(0.5, 1.0, -0.5)); 
+    let L2 = normalize(vec3<f32>(-0.8, -0.6, 0.5)); 
+    
+    let L1_up = vec3<f32>(0.0, 1.0, 0.0);
+    
+    // ONE-BOUNCE DIRECTIONAL SHADOW
+    // Since true soft shadows require thousands of stochastic rays (Raytracing Mode),
+    // Preview Mode uses a single, ultra-fast crisp hard shadow to maintain 60 FPS.
+    let shadowRay = Ray(gb_p.xyz + N * 0.01, L1, 1.0 / L1);
+    let shadowHit = worldHit(shadowRay, rngState);
+    let shadowVis = select(1.0, 0.05, shadowHit.hit);
+    
+    let NdotL1 = max(dot(N, L1), 0.0) * shadowVis;
+    let NdotL2 = max(dot(N, L2), 0.0);
+    
+    let skyColor = cam.skyData.xyz * cam.skyData.w;
+    let skyWeight = 0.5 * (N.y + 1.0);
+    let ambient = mix(vec3<f32>(0.08), skyColor, skyWeight);
+    
+    let H1 = normalize(L1 + V); let spec1 = pow(max(dot(N, H1), 0.0), max(128.0 * gb_n.w, 4.0)) * gb_n.w * 2.0 * shadowVis;
+    let H2 = normalize(L2 + V); let spec2 = pow(max(dot(N, H2), 0.0), max(32.0 * gb_n.w, 2.0)) * gb_n.w * 0.4;
+    
+    let NdotV = max(dot(N, V), 0.0);
+    let fresnel = pow(1.0 - NdotV, 5.0);
+    
+    var diffuseColor = gb_a.rgb * (NdotL1 * 1.5 + NdotL2 * 0.25 + ambient * 0.4);
+    
+    let safeR = R + vec3<f32>(0.001);
+    let skyReflection = getSkyColor(Ray(gb_p.xyz, safeR, 1.0 / safeR));
+    
+    let specColorBase = mix(vec3<f32>(1.0), gb_a.rgb, metallic);
+    var specularColor = specColorBase * (spec1 + spec2) + skyReflection * gb_n.w * mix(0.15, 1.0, fresnel);
+    
+    var matColor = diffuseColor + specularColor;
+    
+    matColor += gb_a.rgb * max(0.0, gb_a.a);
+    
+    if (gb_p.w > 0.0) {
+        let safeV = V + vec3<f32>(0.001);
+        let ray = Ray(gb_p.xyz - V * 0.001, -V, 1.0 / -safeV);
+        matColor = mix(matColor, getSkyColor(ray), max(gb_p.w - fresnel * 0.8, 0.0));
+    }
+    return vec4<f32>(matColor, 1.0);
+}

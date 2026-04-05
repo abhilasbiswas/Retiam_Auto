@@ -380,7 +380,7 @@ export default function App() {
                                 <div style={rowStyle}><span>Preview Denoiser:</span><select id="selPreviewDenoiser" style={inputStyle} defaultValue="rt_hdr_alb_nrm"><option value="none">None</option><option value="spatial">Fast Spatial</option><option value="rt_hdr">rt_hdr.tza</option><option value="rt_hdr_alb_nrm">rt_hdr_alb_nrm.tza</option></select></div>
                                 <div style={rowStyle}><span>Sky Intensity:</span><input id="uiSkyIntensity" type="range" min="0" max="10" defaultValue="1.0" step="0.1" /><span id="skyIntensityVal" style={valStyle}>1.0</span></div>
                                 <div style={rowStyle}><span>GI Multiplier:</span><input id="uiGIMultiplier" type="range" min="0" max="5" defaultValue="1.0" step="0.1" /><span id="giMultiplierVal" style={valStyle}>1.0</span></div>
-                                <div style={rowStyle}><span>Preview Samples:</span><input id="inpPreviewSpp" type="number" defaultValue="1" style={inputStyle} /></div>
+                                <div style={rowStyle}><span>Preview Samples:</span><input id="inpPreviewSpp" type="number" defaultValue="4" style={inputStyle} /></div>
                                 <div style={rowStyle}><span>Preview Bounces:</span><input id="inpBounces" type="number" defaultValue="5" style={inputStyle} /></div>
 
                                 <div style={{ height: '1px', background: '#222', margin: '16px 0' }} />

@@ -657,7 +657,8 @@ export class Scene {
             // Pass the numeric mode to the shader
             this.engine.device.queue.writeBuffer(this.engine.postProcBuffer, 0, new Float32Array([previewDenoiserMode, this.frameCount, this.oidnReady ? 1.0 : 0.0, 0]));
 
-            const activeDenoiser = (previewDenoiserMode === 1) && this.cameraController.rtEnabled;
+            // Force the fast spatial denoise on while the timeline plays if an AI denoiser is selected to eliminate grain
+            const activeDenoiser = (previewDenoiserMode === 1 || (isOidn && (isAnimating || this.isScrubbing()))) && this.cameraController.rtEnabled;
             this.engine.update(this.mobjects, this.camera, this.frameCount, activeDenoiser, this.cameraController.rtEnabled, this.cameraController.useDoF, activeSpp);
             this.engine.render(this.frameCount, false, this.mobjects);
         }

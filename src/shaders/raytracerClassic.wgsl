@@ -86,33 +86,7 @@
         let gb_p = textureLoad(gbPos, coord, 0);
         let gb_n = textureLoad(gbNormal, coord, 0);
         let gb_a = textureLoad(gbAlbedo, coord, 0);
-        
-        if (gb_a.a < -0.5) {
-            let ray = Ray(cameraRay.origin, dirToScreen, 1.0 / dirToScreen);
-            return vec4<f32>(getSkyColor(ray), 1.0);
-        } else {
-            let N = normalize(gb_n.xyz); let V = -dirToScreen;
-            let L1 = normalize(vec3<f32>(0.5, 1.0, -0.5)); let NdotL1 = max(dot(N, L1), 0.0);
-            let L2 = normalize(vec3<f32>(-0.8, -0.2, 0.5)); let NdotL2 = max(dot(N, L2), 0.0);
-            
-            let skyWeight = 0.5 * (N.y + 1.0);
-            let ambient = mix(vec3<f32>(0.05), cam.skyData.xyz * cam.skyData.w, skyWeight) * 0.5;
-            
-            let H1 = normalize(L1 + V); let spec1 = pow(max(dot(N, H1), 0.0), 64.0) * gb_n.w * 1.5;
-            let H2 = normalize(L2 + V); let spec2 = pow(max(dot(N, H2), 0.0), 32.0) * gb_n.w * 0.5;
-            
-            let fresnel = 1.0 - max(dot(N, V), 0.0); let edgeDarken = mix(1.0, 0.6, fresnel * gb_n.w);
-            
-            var matColor = gb_a.rgb * edgeDarken * (NdotL1 * 1.5 + NdotL2 * 0.3 + ambient);
-            matColor += vec3<f32>(1.0) * (spec1 + spec2);
-            matColor += gb_a.rgb * max(0.0, gb_a.a);
-            
-            if (gb_p.w > 0.0) {
-                let ray = Ray(gb_p.xyz - V * 0.001, -V, 1.0 / -V);
-                matColor = mix(matColor, getSkyColor(ray), gb_p.w * 0.85);
-            }
-            return vec4<f32>(matColor, 1.0);
-        }
+        return evaluateFallbackShading(gb_p, gb_n, gb_a, cameraRay.origin, dirToScreen, 0.0, &rngState);
     }
 
     var totalColor = vec3<f32>(0.0);

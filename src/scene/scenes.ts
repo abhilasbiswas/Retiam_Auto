@@ -53,14 +53,14 @@ export class Scene {
     add(...objs) {
         let needsBake = false;
         const addRecursive = (o) => {
-            if (!this.mobjects.includes(o)) { 
-                this.mobjects.push(o); 
-                if (o.triangles) needsBake = true; 
+            if (!this.mobjects.includes(o)) {
+                this.mobjects.push(o);
+                if (o.triangles) needsBake = true;
             }
             if (o.children) o.children.forEach(addRecursive);
         };
         objs.forEach(addRecursive);
-        
+
         if (this.engine && needsBake) {
             // FIX: Automatically load textures for objects added mid-animation
             this.engine.loadMeshesTextures(this.mobjects).then(() => {
@@ -226,10 +226,11 @@ export class Scene {
 
         document.getElementById('uiFov').addEventListener('input', (e) => { this.camera.fov = parseFloat(e.target.value) * Math.PI / 180; this.frameCount = 0; });
         document.getElementById('uiAperture').addEventListener('input', (e) => { this.camera.aperture = parseFloat(e.target.value); this.frameCount = 0; });
-        document.getElementById('uiFocus').addEventListener('input', (e) => { 
-            this.camera.focusDist = parseFloat(e.target.value); 
-            this.cameraController.autoFocus = false; 
-            this.frameCount = 0; });
+        document.getElementById('uiFocus').addEventListener('input', (e) => {
+            this.camera.focusDist = parseFloat(e.target.value);
+            this.cameraController.autoFocus = false;
+            this.frameCount = 0;
+        });
         document.getElementById('btnAutoFocus').addEventListener('click', () => { this.cameraController.autoFocus = !this.cameraController.autoFocus; this.cameraController.fPressed = true; });
 
         document.getElementById('uiSkyIntensity').addEventListener('input', (e) => {
@@ -347,9 +348,9 @@ export class Scene {
 
         requestAnimationFrame(async t => { this.lastTime = t; await this._loop(t); });
     }
-async _loop(time) {
+    async _loop(time) {
         if (window.isRenderingVideo || this.isBaking) {
-            this.lastTime = time; 
+            this.lastTime = time;
             requestAnimationFrame(async t => await this._loop(t));
             return;
         }
@@ -461,10 +462,10 @@ async _loop(time) {
 
             // --- SMOOTH VIEWPORT STROBE FIX ---
             if (this.frameCount < 60) {
-                if (this.frameCount % 5 === 0) f(); 
+                if (this.frameCount % 5 === 0) f();
                 else this.isProcessingOIDN = false;
             } else {
-                if (this.frameCount % 30 === 0) f(); 
+                if (this.frameCount % 30 === 0) f();
                 else this.isProcessingOIDN = false;
             }
         }
@@ -497,11 +498,11 @@ async _loop(time) {
 
     async startOfflineRender(fps, duration, targetSpp) {
         window.isRenderingVideo = true;
-        
+
         // --- FORCE CLASSIC PATH TRACING FOR OFFLINE CLARITY ---
         const originalTechnique = this.engine.rtTechnique;
-        this.engine.rtTechnique = 0; 
-        
+        this.engine.rtTechnique = 0;
+
         document.getElementById('status').innerText = "Status: OFFLINE RENDERING...";
         document.getElementById('status').style.color = "#e91e63";
         document.getElementById('progressContainer').style.display = "block";
@@ -537,8 +538,8 @@ async _loop(time) {
         const offlineBounces = parseInt(document.getElementById('inpOfflineBounces').value) || 5;
 
         this.camera = {
-            ...curCam, 
-            pos: [...curCam.pos], dir: [...curCam.dir], right: [...curCam.right], up: [...curCam.up], skyColor: [...curCam.skyColor], 
+            ...curCam,
+            pos: [...curCam.pos], dir: [...curCam.dir], right: [...curCam.right], up: [...curCam.up], skyColor: [...curCam.skyColor],
             bounces: offlineBounces
         };
 
@@ -581,16 +582,16 @@ async _loop(time) {
             this.mobjects.forEach(m => runUpdaters(m, dt));
             if (this.alwaysUpdate) this.alwaysUpdate(dt, this.clock);
 
-            let accFrame = 0; 
+            let accFrame = 0;
             const passes = Math.ceil(targetSpp / 4);
             this.engine.useScissor = tileSizeSelect > 0;
-            
+
             // LOCKED NOISE SEQUENCE: Resets to 0 every frame to prevent boiling video noise!
-            let globalPassIndex = 0; 
+            let globalPassIndex = 0;
 
             for (let p = 0; p < passes; p++) {
                 this.engine.device.queue.writeBuffer(this.engine.postProcBuffer, 0, new Float32Array([0, accFrame, 0, 0]));
-                
+
                 this.engine.update(this.mobjects, this.camera, accFrame, false, true, this.cameraController.useDoF, 4, globalPassIndex);
 
                 for (let i = 0; i < tiles.length; i++) {
@@ -610,7 +611,7 @@ async _loop(time) {
 
             if (isOfflineOidn) {
                 document.getElementById('progressText').innerText = `Frame ${frame + 1} / ${totalFrames} (AI Denoising [${offlineOidnModel}]...)`;
-                
+
                 await this.oidnManager.init(offlineOidnModel);
                 await this.oidnManager.denoise(accFrame - 1);
 
@@ -659,7 +660,7 @@ async _loop(time) {
 
         const vpNode = document.getElementById('viewport-container');
         this.engine.resize(vpNode.clientWidth, vpNode.clientHeight);
-        
+
         // --- RESTORE ORIGINAL RT TECHNIQUE ---
         this.engine.rtTechnique = originalTechnique;
 
@@ -669,7 +670,7 @@ async _loop(time) {
         this.frameCount = 0; this.oidnReady = false; this.lastTime = performance.now();
         requestAnimationFrame(async t => await this._loop(t));
     }
-        }
+}
 
 // ==========================================
 // Classic Cornell Box Demo Scene
@@ -709,11 +710,11 @@ export class NativeWaterScene extends Scene {
         this.pool.set_material([0.2, 0.6, 0.8], 0.2);
 
         // 3. Add a couple of floating spheres for refraction aesthetic
-        this.sphere1 = new Sphere(1.5);
+        this.sphere1 = new Sphere(1.5).make_interactable();
         this.sphere1.position = [-2.0, 0.0, -1.5];
         this.sphere1.set_material([1.0, 0.2, 0.3], 0.9, 0.0); // Shiny red
 
-        this.sphere2 = new Sphere(1.0);
+        this.sphere2 = new Sphere(1.0).make_interactable();
         this.sphere2.position = [2.5, 0.5, 2.0];
         this.sphere2.set_material([1.0, 1.0, 1.0], 1.0, 0.8, 1.5); // Glass
     }
@@ -747,11 +748,11 @@ export class TaichiWaterScene extends Scene {
         this.pool.set_material([0.2, 0.6, 0.8], 0.2);
 
         // 3. Add a couple of floating spheres for refraction aesthetic
-        this.sphere1 = new Sphere(1.5);
+        this.sphere1 = new Sphere(1.5).make_interactable();
         this.sphere1.position = [-2.0, 0.0, -1.5];
         this.sphere1.set_material([1.0, 0.2, 0.3], 0.9, 0.0); // Shiny red
 
-        this.sphere2 = new Sphere(1.0);
+        this.sphere2 = new Sphere(1.0).make_interactable();
         this.sphere2.position = [2.5, 0.5, 2.0];
         this.sphere2.set_material([1.0, 1.0, 1.0], 1.0, 0.8, 1.5); // Glass
     }
@@ -858,11 +859,16 @@ export class VoxelRoomScene extends Scene {
         this.leftWall.albedoUrl = pegboardTex;
 
         const wallColor = [0.85, 0.85, 0.9];
-        this.rwBase = new Box(12, 1.5, 0.5, wallColor); this.rwBase.position = [0, 0.75, -6.25];
-        this.rwTop = new Box(12, 3, 0.5, wallColor); this.rwTop.position = [0, 8.5, -6.25];
-        this.rwP1 = new Box(3, 5.5, 0.5, wallColor); this.rwP1.position = [-4.5, 4.25, -6.25];
-        this.rwP2 = new Box(2, 5.5, 0.5, wallColor); this.rwP2.position = [0, 4.25, -6.25];
-        this.rwP3 = new Box(4, 5.5, 0.5, wallColor); this.rwP3.position = [4.0, 4.25, -6.25];
+        this.rwBase = new Box(12, 1.5, 0.5, wallColor);
+        this.rwBase.position = [0, 0.75, -6.25];
+        this.rwTop = new Box(12, 3, 0.5, wallColor);
+        this.rwTop.position = [0, 8.5, -6.25];
+        this.rwP1 = new Box(3, 5.5, 0.5, wallColor);
+        this.rwP1.position = [-4.5, 4.25, -6.25];
+        this.rwP2 = new Box(2, 5.5, 0.5, wallColor);
+        this.rwP2.position = [0, 4.25, -6.25];
+        this.rwP3 = new Box(4, 5.5, 0.5, wallColor);
+        this.rwP3.position = [4.0, 4.25, -6.25];
 
         // 3. Emissive Lights
         this.lightYellow = new LightBox(2, 5.5, 0.2, [1.0, 0.2, 0.0], 0.0);
@@ -885,7 +891,7 @@ export class VoxelRoomScene extends Scene {
         // this.deskGroup.opacity = 0.5;
         // this.deskGroup.set_material(Material.TransparentNoRefraction([0.4, 0.7, 1.0], 1.0)); 
 
-        deskTop.set_material([1,1, 1.0], 1.0, 0.1, 0.0);
+        deskTop.set_material([1, 1, 1.0], 1.0, 0.1, 0.0);
 
         this.shelf1 = new Box(1.5, 0.2, 3.5, furnColor); this.shelf1.position = [-5.4, 4.5, 2.5];
         this.shelf2 = new Box(1.5, 0.2, 3.5, furnColor); this.shelf2.position = [-5.4, 5.8, 2.5];
@@ -894,14 +900,47 @@ export class VoxelRoomScene extends Scene {
         // 1. Blue Glass Cube
         this.cube1 = new Box(1.2, 1.2, 1.2, [0.4, 0.7, 1.0]);
         this.cube1.position = [4.0, 0.6, 1.0];
+        this.cube1.make_interactable();
         // Parameters: color, smoothness, transparency, ior
-        this.cube1.set_material([0.4, 0.7, 1.0], 1.0, 0.9, 1.5); 
+        this.cube1.set_material([0.4, 0.7, 1.0], 1.0, 0.9, 1.5);
 
         // 2. Red Glass Cube
         this.cube2 = new Box(0.9, 0.9, 0.9, [1.0, 0.4, 0.4]);
         this.cube2.position = [3.8, 1.65, 0.9];
+        this.cube2.make_interactable();
         // Using transparency of 0.9 makes it clear glass, IOR of 1.5 is the physical constant for glass
         this.cube2.set_material([1.0, 0.4, 0.4], 1.0, 0.9, 1.5);
+
+        // --- INTERACTIVE DEMO: Draggable Desk Lamp ---
+        // A glowing orb sitting on the desk. Drag it up/down to control brightness!
+        this.deskLamp = new Sphere(0.35);
+        this.deskLamp.position = [-4.8, 3.55, 2.5];
+        this.deskLamp.set_material([1.0, 0.9, 0.7], 0.9, 0.0, 1.5, [1.0, 0.85, 0.6], 4.0);
+        this.deskLamp.make_interactable();
+
+        // Custom Y-axis-only drag: Moving the lamp up increases emission, down dims it
+        this.deskLamp.onMouseDown = (pt, rayDir) => {
+            this.deskLamp._dragStartY = pt[1];
+            this.deskLamp._dragStartPosY = this.deskLamp.position[1];
+            this.deskLamp._dragStartEmStrength = this.deskLamp.emStrength;
+            return true;
+        };
+        this.deskLamp.onMouseDrag = (pt, rayDir, tHit) => {
+            // Constrain to Y axis only, clamp between desk surface and ceiling
+            const newY = Math.max(3.55, Math.min(8.0,
+                this.deskLamp._dragStartPosY + (pt[1] - this.deskLamp._dragStartY)
+            ));
+            this.deskLamp.position = [
+                this.deskLamp.position[0],
+                newY,
+                this.deskLamp.position[2]
+            ];
+
+            // Map height to emission strength: higher = brighter (range 1..12)
+            const heightRatio = (newY - 3.55) / (8.0 - 3.55);
+            this.deskLamp.emStrength = 1.0 + heightRatio * 11.0;
+            return true;
+        };
     }
 
     async construct() {
@@ -921,33 +960,33 @@ export class VoxelRoomScene extends Scene {
 
         // --- STEP 1: THE FLOOR & LIGHTS ---
         // FIX 2: Bring the lights in at the very beginning so they illuminate the room
-        
-      
+
+
         await this.play(
             new Create(this.lightYellow, { run_time: 1.0 }),
             new Create(this.lightBlue, { run_time: 1.0 })
         );
         this.play(new MoveCamera(this.camera, {
-                pos: [8, 13, 12],
-                dir: Math3D.normalize(Math3D.sub([-2, 2, 0], [8, 13, 12])),
-                fov: 40 * Math.PI / 180,
-                focusDist: 14.0
-            }, { run_time: 6.0 }),
-            );
+            pos: [8, 13, 12],
+            dir: Math3D.normalize(Math3D.sub([-2, 2, 0], [8, 13, 12])),
+            fov: 40 * Math.PI / 180,
+            focusDist: 14.0
+        }, { run_time: 6.0 }),
+        );
         this.play(
-        this.lightYellow.animate({ 
-            run_time: 5.0, 
-            rate_func: rate_functions.easeIn // Glow starts slow then accelerates
-        })
-        .set_material([1.0, 0.6, 0.1], 0.1, 0, 1.5, [1.0, 0.2, 0.0], 8.0)
-        .build(),
+            this.lightYellow.animate({
+                run_time: 5.0,
+                rate_func: rate_functions.easeIn // Glow starts slow then accelerates
+            })
+                .set_material([1.0, 0.6, 0.1], 0.1, 0, 1.5, [1.0, 0.2, 0.0], 8.0)
+                .build(),
 
-        this.lightBlue.animate({ 
-            run_time: 5.0, 
-            rate_func: rate_functions.smooth // Gentle start and finish
-        })
-        .set_material([0.1, 0.4, 1.0], 0.1, 0, 1.5, [0.01, 0.4, 1.0], 8.0)
-        .build(),
+            this.lightBlue.animate({
+                run_time: 5.0,
+                rate_func: rate_functions.smooth // Gentle start and finish
+            })
+                .set_material([0.1, 0.4, 1.0], 0.1, 0, 1.5, [0.01, 0.4, 1.0], 8.0)
+                .build(),
 
             skyFade.animate({ run_time: 6.0 }).set_value(0.2).build(),
         );
@@ -979,16 +1018,51 @@ export class VoxelRoomScene extends Scene {
         // --- STEP 4: CINEMATIC SWEEP & LIGHT TRANSITION ---
         this.cube1.add_updater((m, dt) => m.rotate(0, dt * 1.5, 0));
         this.cube2.add_updater((m, dt) => m.rotate(dt, dt, 0));
-        
+
+        // --- INTERACTIVE CUBE: Click to cycle glass colors ---
+        const cubeColors = [
+            { color: [0.4, 0.7, 1.0], label: 'Blue' },
+            { color: [0.2, 1.0, 0.5], label: 'Green' },
+            { color: [1.0, 0.85, 0.2], label: 'Gold' },
+            { color: [0.9, 0.3, 1.0], label: 'Purple' },
+        ];
+        let cube1ColorIdx = 0;
+        this.cube1.onMouseDown = (pt) => {
+            cube1ColorIdx = (cube1ColorIdx + 1) % cubeColors.length;
+            const c = cubeColors[cube1ColorIdx].color;
+            this.cube1.set_material(c, 1.0, 0.9, 1.5);
+            console.log(`🔷 Cube 1 → ${cubeColors[cube1ColorIdx].label} glass`);
+            return false; // false = click-only, no drag
+        };
+
+        const cube2Colors = [
+            { color: [1.0, 0.4, 0.4], label: 'Red' },
+            { color: [1.0, 1.0, 1.0], label: 'Clear' },
+            { color: [0.1, 0.1, 0.1], label: 'Obsidian' },
+        ];
+        let cube2ColorIdx = 0;
+        this.cube2.onMouseDown = (pt) => {
+            cube2ColorIdx = (cube2ColorIdx + 1) % cube2Colors.length;
+            const c = cube2Colors[cube2ColorIdx].color;
+            this.cube2.set_material(c, 1.0, 0.9, 1.5);
+            console.log(`🔴 Cube 2 → ${cube2Colors[cube2ColorIdx].label} glass`);
+            return false; // false = click-only, no drag
+        };
+
         // FIX 3: Fade out the sky light as the camera moves in for that "cinematic" look
-        
+
         await this.play(
-            
+
             new Create(this.cube1, { run_time: 1.0 }),
             new Create(this.cube2, { run_time: 1.0 })
         );
 
-        // --- STEP 5: FINAL INDICATE ---
+        // --- STEP 5: BRING IN THE INTERACTIVE DESK LAMP ---
+        await this.play(
+            new Create(this.deskLamp, { run_time: 1.0 }),
+        );
+
+        // --- STEP 6: FINAL INDICATE ---
         await this.play(new Indicate(this.cube2, { run_time: 1.5 }));
 
 

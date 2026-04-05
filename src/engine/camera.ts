@@ -1,7 +1,6 @@
 // @ts-nocheck
 import { Math3D } from "../math/math3d";
 
-
 export class CameraController {
     constructor(camera, canvas) {
         this.camera = camera; this.canvas = canvas; this.keys = {};
@@ -13,21 +12,206 @@ export class CameraController {
         this.targetFocus = camera.focusDist; 
         this.autoFocus = true;
 
+        this.isDragging = false;
+        this.dragInfo = null;
+        this.dragMoved = false;
+        this.lastMobjects = [];
+
         window.addEventListener('keydown', e => this.keys[e.code] = true);
         window.addEventListener('keyup', e => this.keys[e.code] = false);
 
-        canvas.addEventListener('click', () => { if (!window.isRenderingVideo) canvas.requestPointerLock(); });
+        canvas.addEventListener('mousedown', (e) => {
+            if (e.button !== 0 || window.isRenderingVideo) return;
+            
+            let rect = canvas.getBoundingClientRect();
+            let rayDir = this.getRayFromMouse(e.clientX - rect.left, e.clientY - rect.top, rect);
+            let hit = this.raycast(this.camera.pos, rayDir, this.lastMobjects || [], true);
+            
+            if (hit.object && hit.object.onMouseDown) {
+                let intersectPt = [
+                    this.camera.pos[0] + rayDir[0] * hit.distance,
+                    this.camera.pos[1] + rayDir[1] * hit.distance,
+                    this.camera.pos[2] + rayDir[2] * hit.distance
+                ];
+                
+                let consumed = hit.object.onMouseDown(intersectPt, Math3D.normalize([...rayDir]), Math3D.normalize([...this.camera.dir]));
+                
+                if (consumed !== false) {
+                    this.dragInfo = {
+                        object: hit.object,
+                        planeNormal: [...this.camera.dir],
+                        planePt: intersectPt
+                    };
+                    this.isDragging = true;
+                    return; // Enter interactive dragging state instead of pointer lock
+                }
+            }
+            
+            canvas.requestPointerLock();
+        });
+
+        document.addEventListener('mouseup', (e) => {
+            if (e.button === 0) {
+                if (this.isDragging && this.dragInfo && this.dragInfo.object.onMouseUp) {
+                    this.dragInfo.object.onMouseUp();
+                }
+                this.isDragging = false;
+                this.dragInfo = null;
+            }
+        });
+
         document.addEventListener('pointerlockchange', () => { this.locked = document.pointerLockElement === canvas; });
 
         document.addEventListener('mousemove', e => {
-            if (!this.locked || window.isRenderingVideo) return;
-            this.yaw -= e.movementX * this.sensitivity; this.pitch -= e.movementY * this.sensitivity;
-            const limit = Math.PI / 2 - 0.01; this.pitch = Math.max(-limit, Math.min(limit, this.pitch));
+            if (window.isRenderingVideo) return;
+            
+            if (this.isDragging && this.dragInfo) {
+                let rect = canvas.getBoundingClientRect();
+                let rayDir = this.getRayFromMouse(e.clientX - rect.left, e.clientY - rect.top, rect);
+                
+                let num = 
+                    this.dragInfo.planeNormal[0] * (this.dragInfo.planePt[0] - this.camera.pos[0]) +
+                    this.dragInfo.planeNormal[1] * (this.dragInfo.planePt[1] - this.camera.pos[1]) +
+                    this.dragInfo.planeNormal[2] * (this.dragInfo.planePt[2] - this.camera.pos[2]);
+                    
+                let den = 
+                    this.dragInfo.planeNormal[0] * rayDir[0] +
+                    this.dragInfo.planeNormal[1] * rayDir[1] +
+                    this.dragInfo.planeNormal[2] * rayDir[2];
+
+                if (Math.abs(den) > 0.0001) {
+                    let tHit = num / den;
+                    let newIntersectPt = [
+                        this.camera.pos[0] + rayDir[0] * tHit,
+                        this.camera.pos[1] + rayDir[1] * tHit,
+                        this.camera.pos[2] + rayDir[2] * tHit
+                    ];
+                    
+                    if (this.dragInfo.object.onMouseDrag) {
+                        let objMoved = this.dragInfo.object.onMouseDrag(newIntersectPt, Math3D.normalize([...rayDir]), tHit);
+                        if (objMoved !== false) this.dragMoved = true;
+                    }
+                }
+            } else if (this.locked) {
+                this.yaw -= e.movementX * this.sensitivity; this.pitch -= e.movementY * this.sensitivity;
+                const limit = Math.PI / 2 - 0.01; this.pitch = Math.max(-limit, Math.min(limit, this.pitch));
+            }
         });
     }
+
+    getRayFromMouse(x, y, rect) {
+        let ndcX = (x / rect.width) * 2 - 1;
+        let ndcY = -(y / rect.height) * 2 + 1;
+        let aspect = rect.width / rect.height;
+        let tanFov = Math.tan(this.camera.fov * 0.5);
+        
+        let dx = this.camera.right[0] * ndcX * aspect * tanFov + this.camera.up[0] * ndcY * tanFov;
+        let dy = this.camera.right[1] * ndcX * aspect * tanFov + this.camera.up[1] * ndcY * tanFov;
+        let dz = this.camera.right[2] * ndcX * aspect * tanFov + this.camera.up[2] * ndcY * tanFov;
+        
+        return Math3D.normalize([
+            this.camera.dir[0] + dx,
+            this.camera.dir[1] + dy,
+            this.camera.dir[2] + dz
+        ]);
+    }
+
+    raycast(origin, dir, mobjects, onlyInteractable = false) {
+        let closestInfo = { distance: 999999, object: null };
+
+        for (let m of mobjects) {
+            if (onlyInteractable && !m.isInteractable) continue;
+
+            if (!m.triangles && m.radius !== undefined) {
+                let oc = Math3D.sub(origin, m.position);
+                let dotOCDir = oc[0] * dir[0] + oc[1] * dir[1] + oc[2] * dir[2];
+                let c = (oc[0] * oc[0] + oc[1] * oc[1] + oc[2] * oc[2]) - (m.radius * m.scale[0]) ** 2;
+                let disc = dotOCDir * dotOCDir - c;
+                if (disc > 0) {
+                    let t = -dotOCDir - Math.sqrt(disc);
+                    if (t > 0 && t < closestInfo.distance) {
+                        closestInfo.distance = t;
+                        closestInfo.object = m;
+                    }
+                }
+            }
+            else if (m.triangles && m.bvh && m.bvh.nodes.length) {
+                let invMat = Math3D.mat4();
+                Math3D.mat4Invert(invMat, m.get_world_matrix());
+
+                let lO = [
+                    invMat[0] * origin[0] + invMat[4] * origin[1] + invMat[8] * origin[2] + invMat[12],
+                    invMat[1] * origin[0] + invMat[5] * origin[1] + invMat[9] * origin[2] + invMat[13],
+                    invMat[2] * origin[0] + invMat[6] * origin[1] + invMat[10] * origin[2] + invMat[14]
+                ];
+                let lD = [
+                    invMat[0] * dir[0] + invMat[4] * dir[1] + invMat[8] * dir[2],
+                    invMat[1] * dir[0] + invMat[5] * dir[1] + invMat[9] * dir[2],
+                    invMat[2] * dir[0] + invMat[6] * dir[1] + invMat[10] * dir[2]
+                ];
+                let invLD = [1 / lD[0], 1 / lD[1], 1 / lD[2]];
+
+                let stack = [0];
+                let hitDist = 999999;
+                while (stack.length > 0) {
+                    let nodeIdx = stack.pop();
+                    let node = m.bvh.nodes[nodeIdx];
+
+                    let t1 = (node.min[0] - lO[0]) * invLD[0], t2 = (node.max[0] - lO[0]) * invLD[0];
+                    let tmin = Math.min(t1, t2), tmax = Math.max(t1, t2);
+                    let t3 = (node.min[1] - lO[1]) * invLD[1], t4 = (node.max[1] - lO[1]) * invLD[1];
+                    tmin = Math.max(tmin, Math.min(t3, t4)); tmax = Math.min(tmax, Math.max(t3, t4));
+                    let t5 = (node.min[2] - lO[2]) * invLD[2], t6 = (node.max[2] - lO[2]) * invLD[2];
+                    tmin = Math.max(tmin, Math.min(t5, t6)); tmax = Math.min(tmax, Math.max(t5, t6));
+
+                    if (tmax < Math.max(0, tmin) || tmin >= hitDist) continue;
+
+                    if (node.triCount > 0) {
+                        for (let i = 0; i < node.triCount; i++) {
+                            let tri = m.bvh.triangles[node.leftFirst + i];
+                            let e1 = [tri[1][0] - tri[0][0], tri[1][1] - tri[0][1], tri[1][2] - tri[0][2]];
+                            let e2 = [tri[2][0] - tri[0][0], tri[2][1] - tri[0][1], tri[2][2] - tri[0][2]];
+                            let h = Math3D.cross(lD, e2);
+                            let a = e1[0] * h[0] + e1[1] * h[1] + e1[2] * h[2];
+                            if (a > -0.00001 && a < 0.00001) continue;
+
+                            let f = 1.0 / a;
+                            let s = [lO[0] - tri[0][0], lO[1] - tri[0][1], lO[2] - tri[0][2]];
+                            let u = f * (s[0] * h[0] + s[1] * h[1] + s[2] * h[2]);
+                            if (u < 0.0 || u > 1.0) continue;
+
+                            let q = Math3D.cross(s, e1);
+                            let v = f * (lD[0] * q[0] + lD[1] * q[1] + lD[2] * q[2]);
+                            if (v < 0.0 || u + v > 1.0) continue;
+
+                            let t = f * (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]);
+                            let worldDist = t * Math3D.length(lD);
+                            if (worldDist > 0.001 && worldDist < hitDist) hitDist = worldDist;
+                        }
+                    } else {
+                        stack.push(node.leftFirst, node.leftFirst + 1);
+                    }
+                }
+                
+                if (hitDist < closestInfo.distance) {
+                    closestInfo.distance = hitDist;
+                    closestInfo.object = m;
+                }
+            }
+        }
+
+        return closestInfo;
+    }
+
     update(dt, mobjects = []) {
         if (window.isRenderingVideo) return false;
+        this.lastMobjects = mobjects;
         let moved = false;
+
+        if (this.dragMoved) {
+            moved = true;
+            this.dragMoved = false; // Reset flag
+        }
 
         let dirChangedExternally =
             Math.abs(this.camera.dir[0] - this.lastDir[0]) > 0.0001 ||
@@ -79,79 +263,8 @@ export class CameraController {
         if (this.keys['Equal']) { this.camera.fov = Math.min(Math.PI - 0.1, this.camera.fov + 0.5 * dt); moved = true; }
 
         if (this.autoFocus && mobjects) {
-            let origin = this.camera.pos;
-            let dir = this.camera.dir;
-            let closest = 999999;
-
-            for (let m of mobjects) {
-                if (!m.triangles && m.radius !== undefined) {
-                    let oc = Math3D.sub(origin, m.position);
-                    let dotOCDir = oc[0] * dir[0] + oc[1] * dir[1] + oc[2] * dir[2];
-                    let c = (oc[0] * oc[0] + oc[1] * oc[1] + oc[2] * oc[2]) - (m.radius * m.scale[0]) ** 2;
-                    let disc = dotOCDir * dotOCDir - c;
-                    if (disc > 0) {
-                        let t = -dotOCDir - Math.sqrt(disc);
-                        if (t > 0 && t < closest) closest = t;
-                    }
-                }
-                else if (m.triangles && m.bvh && m.bvh.nodes.length) {
-                    let invMat = Math3D.mat4();
-                    Math3D.mat4Invert(invMat, m.get_world_matrix());
-
-                    let lO = [
-                        invMat[0] * origin[0] + invMat[4] * origin[1] + invMat[8] * origin[2] + invMat[12],
-                        invMat[1] * origin[0] + invMat[5] * origin[1] + invMat[9] * origin[2] + invMat[13],
-                        invMat[2] * origin[0] + invMat[6] * origin[1] + invMat[10] * origin[2] + invMat[14]
-                    ];
-                    let lD = [
-                        invMat[0] * dir[0] + invMat[4] * dir[1] + invMat[8] * dir[2],
-                        invMat[1] * dir[0] + invMat[5] * dir[1] + invMat[9] * dir[2],
-                        invMat[2] * dir[0] + invMat[6] * dir[1] + invMat[10] * dir[2]
-                    ];
-                    let invLD = [1 / lD[0], 1 / lD[1], 1 / lD[2]];
-
-                    let stack = [0];
-                    while (stack.length > 0) {
-                        let nodeIdx = stack.pop();
-                        let node = m.bvh.nodes[nodeIdx];
-
-                        let t1 = (node.min[0] - lO[0]) * invLD[0], t2 = (node.max[0] - lO[0]) * invLD[0];
-                        let tmin = Math.min(t1, t2), tmax = Math.max(t1, t2);
-                        let t3 = (node.min[1] - lO[1]) * invLD[1], t4 = (node.max[1] - lO[1]) * invLD[1];
-                        tmin = Math.max(tmin, Math.min(t3, t4)); tmax = Math.min(tmax, Math.max(t3, t4));
-                        let t5 = (node.min[2] - lO[2]) * invLD[2], t6 = (node.max[2] - lO[2]) * invLD[2];
-                        tmin = Math.max(tmin, Math.min(t5, t6)); tmax = Math.min(tmax, Math.max(t5, t6));
-
-                        if (tmax < Math.max(0, tmin) || tmin >= closest) continue;
-
-                        if (node.triCount > 0) {
-                            for (let i = 0; i < node.triCount; i++) {
-                                let tri = m.bvh.triangles[node.leftFirst + i];
-                                let e1 = [tri[1][0] - tri[0][0], tri[1][1] - tri[0][1], tri[1][2] - tri[0][2]];
-                                let e2 = [tri[2][0] - tri[0][0], tri[2][1] - tri[0][1], tri[2][2] - tri[0][2]];
-                                let h = Math3D.cross(lD, e2);
-                                let a = e1[0] * h[0] + e1[1] * h[1] + e1[2] * h[2];
-                                if (a > -0.00001 && a < 0.00001) continue;
-
-                                let f = 1.0 / a;
-                                let s = [lO[0] - tri[0][0], lO[1] - tri[0][1], lO[2] - tri[0][2]];
-                                let u = f * (s[0] * h[0] + s[1] * h[1] + s[2] * h[2]);
-                                if (u < 0.0 || u > 1.0) continue;
-
-                                let q = Math3D.cross(s, e1);
-                                let v = f * (lD[0] * q[0] + lD[1] * q[1] + lD[2] * q[2]);
-                                if (v < 0.0 || u + v > 1.0) continue;
-
-                                let t = f * (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]);
-                                let worldDist = t * Math3D.length(lD);
-                                if (worldDist > 0.001 && worldDist < closest) closest = worldDist;
-                            }
-                        } else {
-                            stack.push(node.leftFirst, node.leftFirst + 1);
-                        }
-                    }
-                }
-            }
+            let hit = this.raycast(this.camera.pos, this.camera.dir, mobjects);
+            let closest = hit.distance;
 
             if (closest !== 999999) {
                 if (Math.abs(closest - this.targetFocus) > 0.5) this.targetFocus = closest;
@@ -185,8 +298,3 @@ export class CameraController {
     }
 
 }
-
-
-// ==========================================
-// Render Engine
-// ==========================================

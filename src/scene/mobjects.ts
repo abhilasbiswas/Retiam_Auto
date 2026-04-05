@@ -68,6 +68,7 @@ export class Mobject {
         this.updaters = [];
         this.parent = null;
         this.children = [];
+        this.isInteractable = false;
     }
 
     // Proxies to keep Engine updates and Animation Timelines working seamlessly
@@ -167,6 +168,39 @@ export class Mobject {
         this.ior = state.ior; this.metallic = state.metallic;
         this.opacity = state.opacity;
         this.value = state.value;
+    }
+
+    // --- INTERACTIVITY API ---
+    make_interactable(enable = true) {
+        this.isInteractable = enable;
+        return this;
+    }
+
+    onMouseDown(intersectPt, rayDir) {
+        // Default behavior: Record intersection offset relative to object center
+        this._dragOffset = [
+            this.position[0] - intersectPt[0],
+            this.position[1] - intersectPt[1],
+            this.position[2] - intersectPt[2]
+        ];
+        return true; // Return true to consume the event and start dragging
+    }
+
+    onMouseDrag(newIntersectPt, rayDir, tHit) {
+        // Default behavior: 3D translation following mouse along intersection plane
+        if (this._dragOffset) {
+            this.position = [
+                newIntersectPt[0] + this._dragOffset[0],
+                newIntersectPt[1] + this._dragOffset[1],
+                newIntersectPt[2] + this._dragOffset[2]
+            ];
+            return true; // Return true to indicate the object moved (triggers accumulation clear)
+        }
+        return false;
+    }
+
+    onMouseUp() {
+        this._dragOffset = null;
     }
 
     animate(kwargs) { return new _AnimateWrapper(this, kwargs); }

@@ -9,6 +9,28 @@
                     return clamp((x * (a * x + b)) / (x * (c * x + d) + e), vec3<f32>(0.0), vec3<f32>(1.0));
                 }
 
+                fn getLuma(c: vec3<f32>) -> f32 { return dot(c, vec3<f32>(0.299, 0.587, 0.114)); }
+
+                fn applyFXAA(coord: vec2<i32>, tex: texture_2d<f32>) -> vec3<f32> {
+                    let c = textureLoad(tex, coord, 0).rgb;
+                    let l = getLuma(c);
+                    let n = textureLoad(tex, coord + vec2<i32>(0, -1), 0).rgb;
+                    let s = textureLoad(tex, coord + vec2<i32>(0, 1), 0).rgb;
+                    let e = textureLoad(tex, coord + vec2<i32>(1, 0), 0).rgb;
+                    let w = textureLoad(tex, coord + vec2<i32>(-1, 0), 0).rgb;
+                    
+                    let ln = getLuma(n); let ls = getLuma(s); let le = getLuma(e); let lw = getLuma(w);
+                    let lMin = min(l, min(min(ln, ls), min(le, lw)));
+                    let lMax = max(l, max(max(ln, ls), max(le, lw)));
+                    
+                    // Contrast threshold for edges. Skip flat surfaces to preserve texture crispness.
+                    if (lMax - lMin < 0.1) { return c; } 
+                    
+                    // Simple morphological cross-blur for detected geometric edges
+                    let crossBlur = (n + s + e + w + (c * 2.0)) / 6.0;
+                    return mix(c, crossBlur, 0.85);
+                }
+
                 @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4<f32> {
                     var pos = array<vec2<f32>, 3>(vec2(-1.0, -1.0), vec2(3.0, -1.0), vec2(-1.0, 3.0));
                     return vec4<f32>(pos[vi], 0.0, 1.0);
@@ -21,6 +43,11 @@
     let denoiseMode = postProc.params.x; 
     let frameCount = postProc.params.y;
     let useOidnResult = postProc.params.z;
+
+    // Apply FXAA dynamically during motion when TAA is deactivated (frameCount 0) to stop aliasing/noise.
+    if (frameCount < 2.0) {
+        color = applyFXAA(centerCoord, tex);
+    }
 
     if (useOidnResult > 0.5) {
         let aiColor = textureLoad(oidnTex, centerCoord, 0).rgb;

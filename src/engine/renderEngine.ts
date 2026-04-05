@@ -199,6 +199,7 @@ export             class RenderEngine {
                 async setupPipelines() {
                     const rtModuleReSTIR = this.device.createShaderModule({ code: shaders.raytracerReSTIR });
                     const rtModuleClassic = this.device.createShaderModule({ code: shaders.raytracerClassic });
+                    const rtModuleCascade = this.device.createShaderModule({ code: shaders.radianceCascades });
                     const screenModule = this.device.createShaderModule({ code: shaders.screen });
                     const refitModule = this.device.createShaderModule({ code: shaders.refitCompute });
                     const gBufferModule = this.device.createShaderModule({ code: shaders.gbuffer });
@@ -248,6 +249,25 @@ export             class RenderEngine {
                     this.oidnExtractPipeline = await this.device.createComputePipelineAsync({ layout: 'auto', compute: { module: this.oidnExtractModule, entryPoint: 'main' } });
                     this.oidnInjectModule = this.device.createShaderModule({ code: oidnInjectWgsl });
                     this.oidnInjectPipeline = await this.device.createComputePipelineAsync({ layout: 'auto', compute: { module: this.oidnInjectModule, entryPoint: 'main' } });
+
+                    const cascadeProbesSize = 983040 * 16; // approx 15.7 MB tensor
+                    if (this.cascadeProbesBuf && this.cascadeProbesBuf.size !== cascadeProbesSize) {
+                        this.cascadeProbesBuf.destroy();
+                        this.cascadeProbesBuf = null; // force recreation if size changed
+                        this.prevCascadeProbesBuf?.destroy();
+                        this.prevCascadeProbesBuf = null;
+                    }
+                    if (!this.cascadeProbesBuf) {
+                        this.cascadeProbesBuf = this.device.createBuffer({ size: cascadeProbesSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC });
+                        this.prevCascadeProbesBuf = this.device.createBuffer({ size: cascadeProbesSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC });
+                    }
+
+                    this.bgLayoutCascade = this.device.createBindGroupLayout({
+                        entries: [
+                            { binding: 0, visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT, buffer: { type: 'storage' } },
+                            { binding: 1, visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } }
+                        ]
+                    });
 
                     this.bgLayout0 = this.device.createBindGroupLayout({
                         entries: [
@@ -307,6 +327,19 @@ export             class RenderEngine {
                         primitive: { topology: 'triangle-list' }
                     });
 
+                    const cascadePipelineLayout = this.device.createPipelineLayout({ bindGroupLayouts: [this.bgLayout0, this.bgLayout1, this.bgLayoutCascade] });
+
+                    this.cascadeC3Pipeline = await this.device.createComputePipelineAsync({ layout: cascadePipelineLayout, compute: { module: rtModuleCascade, entryPoint: 'compute_C3' } });
+                    this.cascadeC2Pipeline = await this.device.createComputePipelineAsync({ layout: cascadePipelineLayout, compute: { module: rtModuleCascade, entryPoint: 'compute_C2' } });
+                    this.cascadeC1Pipeline = await this.device.createComputePipelineAsync({ layout: cascadePipelineLayout, compute: { module: rtModuleCascade, entryPoint: 'compute_C1' } });
+                    this.cascadeC0Pipeline = await this.device.createComputePipelineAsync({ layout: cascadePipelineLayout, compute: { module: rtModuleCascade, entryPoint: 'compute_C0' } });
+
+                    this.rtPipelineCascade = await this.device.createRenderPipelineAsync({
+                        layout: cascadePipelineLayout,
+                        vertex: { module: rtModuleCascade, entryPoint: 'vs_main' }, fragment: { module: rtModuleCascade, entryPoint: 'fs_main', targets: [{ format: 'rgba32float' }] },
+                        primitive: { topology: 'triangle-list' }
+                    });
+
                     this.screenPipeline = await this.device.createRenderPipelineAsync({
                         layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.screenLayout] }),
                         vertex: { module: screenModule, entryPoint: 'vs_main' }, fragment: { module: screenModule, entryPoint: 'fs_main', targets: [{ format: this.presentationFormat }] },
@@ -330,6 +363,13 @@ export             class RenderEngine {
                     this.updateBindGroups();
                 }
                 updateBindGroups() {
+                    this.bgCascade = this.device.createBindGroup({
+                        layout: this.bgLayoutCascade,
+                        entries: [
+                            { binding: 0, resource: { buffer: this.cascadeProbesBuf } },
+                            { binding: 1, resource: { buffer: this.prevCascadeProbesBuf } }
+                        ]
+                    });
                     this.bg0 = this.device.createBindGroup({
                         layout: this.bgLayout0,
                         entries: [
@@ -645,11 +685,27 @@ export             class RenderEngine {
                     gBufferPass.draw(3, 1, 0, 0);
                     gBufferPass.end();
 
+                    if (this.rtTechnique === 2) {
+                        const cascadePass = commandEncoder.beginComputePass();
+                        cascadePass.setBindGroup(0, this.bg0);
+                        cascadePass.setBindGroup(1, readBG); // Dummy for layout mapping
+                        cascadePass.setBindGroup(2, this.bgCascade);
+                        
+                        cascadePass.setPipeline(this.cascadeC3Pipeline); cascadePass.dispatchWorkgroups(1024); // 65536 / 64
+                        cascadePass.setPipeline(this.cascadeC2Pipeline); cascadePass.dispatchWorkgroups(2048); // 131072 / 64
+                        cascadePass.setPipeline(this.cascadeC1Pipeline); cascadePass.dispatchWorkgroups(4096); // 262144 / 64
+                        cascadePass.setPipeline(this.cascadeC0Pipeline); cascadePass.dispatchWorkgroups(8192); // 524288 / 64
+                        
+                        cascadePass.end();
+                        commandEncoder.copyBufferToBuffer(this.cascadeProbesBuf, 0, this.prevCascadeProbesBuf, 0, 983040 * 16);
+                    }
+
                     const rtPass = commandEncoder.beginRenderPass({ colorAttachments: [{ view: writeTex.createView(), loadOp: 'load', storeOp: 'store' }] });
-                    const rtPipelineToUse = this.rtTechnique === 0 ? this.rtPipelineClassic : this.rtPipelineReSTIR;
+                    const rtPipelineToUse = this.rtTechnique === 2 ? this.rtPipelineCascade : (this.rtTechnique === 0 ? this.rtPipelineClassic : this.rtPipelineReSTIR);
                     rtPass.setPipeline(rtPipelineToUse);
                     rtPass.setBindGroup(0, this.bg0);
                     rtPass.setBindGroup(1, readBG);
+                    if (this.rtTechnique === 2) { rtPass.setBindGroup(2, this.bgCascade); }
                     if (this.useScissor && this.tileRect) rtPass.setScissorRect(this.tileRect.x, this.tileRect.y, this.tileRect.width, this.tileRect.height);
                     rtPass.draw(3, 1, 0, 0);
                     rtPass.end();

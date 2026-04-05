@@ -7,10 +7,10 @@ import { VoxelRoomScene, Scene } from '../scene/scenes';
 
 const TabContainer = ({ tabs, activeTab, onTabSelect, children }: any) => (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', background: '#111' }}>
-       <div style={{ display: 'flex', background: '#181818', borderBottom: '1px solid #2a2a2a', userSelect: 'none' }}>
-           {tabs.map((t: any) => (
-               <div key={t.id} onClick={() => onTabSelect(t.id)} 
-                    style={{ 
+        <div style={{ display: 'flex', background: '#181818', borderBottom: '1px solid #2a2a2a', userSelect: 'none' }}>
+            {tabs.map((t: any) => (
+                <div key={t.id} onClick={() => onTabSelect(t.id)}
+                    style={{
                         padding: '6px 14px', fontSize: '10px', cursor: 'pointer', fontWeight: '600', letterSpacing: '0.5px',
                         borderTop: activeTab === t.id ? '2px solid #6366f1' : '2px solid transparent',
                         background: activeTab === t.id ? '#111' : 'transparent',
@@ -18,12 +18,12 @@ const TabContainer = ({ tabs, activeTab, onTabSelect, children }: any) => (
                         display: 'flex', alignItems: 'center', gap: '6px'
                     }}>
                     {t.icon} {t.label.toUpperCase()}
-               </div>
-           ))}
-       </div>
-       <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
-           {children}
-       </div>
+                </div>
+            ))}
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+            {children}
+        </div>
     </div>
 );
 
@@ -33,12 +33,12 @@ export default function App() {
 
     // Left Tabs: 'outliner', 'assets'
     const [leftTab, setLeftTab] = useState('outliner');
-    
+
     // Bottom Tabs: 'timeline', 'interactions'
-    const [bottomTab, setBottomTab] = useState('interactions');
-    
+    const [bottomTab, setBottomTab] = useState('timeline');
+
     // Right Tabs: 'inspector', 'engine', 'export'
-    const [rightTab, setRightTab] = useState('inspector');
+    const [rightTab, setRightTab] = useState('engine');
 
     // Engine UI States
     const [status] = useState("Status: Initializing UI...");
@@ -56,7 +56,7 @@ export default function App() {
                 sceneRef.current = scene;
                 try {
                     if (document.getElementById('canvas')) await scene.run();
-                } catch(e) { console.error("Boot error:", e); }
+                } catch (e) { console.error("Boot error:", e); }
             };
             bootEngine();
         }
@@ -67,8 +67,8 @@ export default function App() {
         };
 
         const handlePlaybackTick = () => {
-             // Just force a re-render so React reads the raw mutated properties from the engine's heap
-             setTickCounter(c => c + 1);
+            // Just force a re-render so React reads the raw mutated properties from the engine's heap
+            setTickCounter(c => c + 1);
         };
 
         window.addEventListener('mobjects-updated', handleMobjectsUpdated);
@@ -87,18 +87,18 @@ export default function App() {
     // Recursive component to render scene graph nodes
     const TreeNode = ({ node, depth }: { node: any, depth: number }) => {
         const isSelected = selectedObject === node;
-        let icon = '⬡'; 
-        if (node.radius) icon = '⭕'; 
-        else if (node.isVector) icon = '📝'; 
+        let icon = '⬡';
+        if (node.radius) icon = '⭕';
+        else if (node.isVector) icon = '📝';
         else if (node.isMorphing) icon = '💧';
-        
+
         let name = node.name || (node.isMorphing ? "Morph Target" : (node.triangles ? "Polygonal Mesh" : (node.radius ? "Analytic Sphere" : "Group")));
 
         return (
             <div>
-                <div 
+                <div
                     onClick={() => { setSelectedObject(node); setRightTab('inspector'); }}
-                    style={{ 
+                    style={{
                         padding: `4px 8px 4px ${depth * 16 + 8}px`, cursor: 'pointer',
                         background: isSelected ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
                         borderLeft: isSelected ? '3px solid #6366f1' : '3px solid transparent',
@@ -106,8 +106,8 @@ export default function App() {
                         display: 'flex', alignItems: 'center', fontSize: '11px', transition: 'background 0.1s',
                         userSelect: 'none'
                     }}
-                    onMouseEnter={(e) => { if(!isSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
-                    onMouseLeave={(e) => { if(!isSelected) e.currentTarget.style.background = 'transparent' }}
+                    onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+                    onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = 'transparent' }}
                 >
                     <span style={{ marginRight: '6px', fontSize: '10px' }}>{icon}</span>
                     {name}
@@ -121,24 +121,24 @@ export default function App() {
 
     const updateObjectProp = (prop: string, val: number, index?: number) => {
         if (!selectedObject || !sceneRef.current) return;
-        
+
         if (index !== undefined) {
-             selectedObject[prop][index] = val;
+            selectedObject[prop][index] = val;
         } else if (prop.startsWith('mat.')) {
-             const key = prop.split('.')[1];
-             selectedObject.material[key] = val;
+            const key = prop.split('.')[1];
+            selectedObject.material[key] = val;
         } else if (prop.startsWith('matColor.')) {
-             const key = prop.split('.')[1];
-             const cIdx = parseInt(key);
-             selectedObject.material.color[cIdx] = val;
+            const key = prop.split('.')[1];
+            const cIdx = parseInt(key);
+            selectedObject.material.color[cIdx] = val;
         } else {
-             selectedObject[prop] = val;
+            selectedObject[prop] = val;
         }
 
         if (selectedObject.triangles) selectedObject.bvhDirty = true;
         (sceneRef.current as any).frameCount = 0;
-        
-        setSelectedObject({...selectedObject} as any);
+
+        setSelectedObject({ ...selectedObject } as any);
         setTimeout(() => setSelectedObject(selectedObject), 0);
     };
 
@@ -153,7 +153,7 @@ export default function App() {
         return () => document.removeEventListener('click', handleClickOutside);
     }, [activeMenu]);
 
-    const MenuDropdown = ({ label, items }: { label: string, items: {name: string, shortcut: string}[] }) => {
+    const MenuDropdown = ({ label, items }: { label: string, items: { name: string, shortcut: string }[] }) => {
         const isOpen = activeMenu === label;
         return (
             <div style={{ position: 'relative' }} onClick={(e) => { e.stopPropagation(); setActiveMenu(isOpen ? null : label); }}>
@@ -165,21 +165,21 @@ export default function App() {
                     {label}
                 </span>
                 {isOpen && (
-                    <div style={{ 
-                        position: 'absolute', top: '100%', left: 0, marginTop: '4px', 
-                        background: '#1f1f1f', border: '1px solid #333', borderRadius: '4px', 
+                    <div style={{
+                        position: 'absolute', top: '100%', left: 0, marginTop: '4px',
+                        background: '#1f1f1f', border: '1px solid #333', borderRadius: '4px',
                         padding: '4px 0', minWidth: '180px', zIndex: 1000,
                         boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
                     }}>
                         {items.map((item, idx) => (
-                            <div key={idx} style={{ 
+                            <div key={idx} style={{
                                 padding: '6px 16px', fontSize: '11px', color: '#ccc',
                                 display: 'flex', justifyContent: 'space-between',
                                 cursor: 'pointer'
-                            }} 
-                            onMouseEnter={e => e.currentTarget.style.background = '#6366f1'}
-                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                            onClick={(e) => { e.stopPropagation(); setActiveMenu(null); }}>
+                            }}
+                                onMouseEnter={e => e.currentTarget.style.background = '#6366f1'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                onClick={(e) => { e.stopPropagation(); setActiveMenu(null); }}>
                                 <span>{item.name}</span>
                                 <span style={{ color: '#888' }}>{item.shortcut}</span>
                             </div>
@@ -224,9 +224,9 @@ export default function App() {
             <PanelGroup orientation="horizontal">
                 {/* LEFT PANEL */}
                 <Panel defaultSize={15} minSize={10} style={{ borderRight: '1px solid #222' }}>
-                    <TabContainer 
-                        activeTab={leftTab} onTabSelect={setLeftTab} 
-                        tabs={[ {id: 'outliner', label: 'Outliner', icon: <Layers size={12}/>}, {id: 'assets', label: 'Assets', icon: <Box size={12}/>} ]}
+                    <TabContainer
+                        activeTab={leftTab} onTabSelect={setLeftTab}
+                        tabs={[{ id: 'outliner', label: 'Outliner', icon: <Layers size={12} /> }, { id: 'assets', label: 'Assets', icon: <Box size={12} /> }]}
                     >
                         {leftTab === 'outliner' ? (
                             <div style={{ padding: '8px 0' }}>
@@ -237,7 +237,7 @@ export default function App() {
                                 )}
                             </div>
                         ) : (
-                            <div style={{ padding: '16px', fontSize: '11px', color: '#666', textAlign: 'center' }}>Asset Browser<br/><br/>(Materials and Decals will appear here)</div>
+                            <div style={{ padding: '16px', fontSize: '11px', color: '#666', textAlign: 'center' }}>Asset Browser<br /><br />(Materials and Decals will appear here)</div>
                         )}
                     </TabContainer>
                 </Panel>
@@ -264,9 +264,9 @@ export default function App() {
 
                         {/* BOTTOM AREA */}
                         <Panel defaultSize={30} minSize={10} style={{ borderTop: '1px solid #222' }}>
-                            <TabContainer 
+                            <TabContainer
                                 activeTab={bottomTab} onTabSelect={setBottomTab}
-                                tabs={[ {id: 'interactions', label: 'Interaction Sequencer'}, {id: 'timeline', label: 'Global Video Timeline'} ]}
+                                tabs={[{ id: 'timeline', label: 'Global Video Timeline' }, { id: 'interactions', label: 'Interaction Sequencer' }]}
                             >
                                 <div style={{ display: bottomTab === 'timeline' ? 'block' : 'none', height: '100%' }}>
                                     <div id="timeline-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -286,21 +286,21 @@ export default function App() {
                                         </div>
                                     </div>
                                 </div>
-                                
+
                                 <div style={{ display: bottomTab === 'interactions' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
                                     <div style={{ padding: '8px 16px', display: 'flex', flexDirection: 'column', height: '100%' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingBottom: '12px', borderBottom: '1px solid #222' }}>
-                                            <button id="btnRecordInteraction" style={{...btnStyle, color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)'}}>⏺ Record Live Track</button>
+                                            <button id="btnRecordInteraction" style={{ ...btnStyle, color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}>⏺ Record Live Track</button>
                                             <button id="btnStopRecord" style={btnStyle} disabled>⏹ Stop</button>
                                             <button id="btnPlayInteraction" style={btnStyle} disabled>⏯ Replay Stack</button>
                                             <div style={{ flex: 1 }}></div>
                                             <button id="btnLoadInteraction" style={btnStyle}>📂 Load Data</button>
-                                            <button id="btnExportInteraction" style={{...btnStyle, color: '#22c55e', borderColor: 'rgba(34, 197, 94, 0.3)'}} disabled>💾 Export Multitrack Bundle</button>
+                                            <button id="btnExportInteraction" style={{ ...btnStyle, color: '#22c55e', borderColor: 'rgba(34, 197, 94, 0.3)' }} disabled>💾 Export Multitrack Bundle</button>
                                             <button id="btnClearInteraction" style={btnStyle} disabled>🗑 Clear Memory</button>
                                             <input type="file" id="fileInteraction" accept=".json" style={{ display: 'none' }} />
                                         </div>
                                         <div id="interactionTrackList" style={{ flex: 1, overflowY: 'auto', paddingTop: '12px' }}>
-                                             <div style={{ fontSize: '11px', color: '#555' }}>No tracks recorded. Press Record to begin logging pointer interactions.</div>
+                                            <div style={{ fontSize: '11px', color: '#555' }}>No tracks recorded. Press Record to begin logging pointer interactions.</div>
                                         </div>
                                     </div>
                                 </div>
@@ -313,12 +313,12 @@ export default function App() {
 
                 {/* RIGHT PANEL */}
                 <Panel defaultSize={20} minSize={15} style={{ borderLeft: '1px solid #222' }}>
-                    <TabContainer 
+                    <TabContainer
                         activeTab={rightTab} onTabSelect={setRightTab}
-                        tabs={[ 
-                            {id: 'inspector', label: 'Inspector', icon: <Settings2 size={12}/>}, 
-                            {id: 'engine', label: 'Engine', icon: <SlidersHorizontal size={12}/>},
-                            {id: 'export', label: 'Export', icon: <Download size={12}/>}
+                        tabs={[
+                            { id: 'engine', label: 'Engine', icon: <SlidersHorizontal size={12} /> },
+                            { id: 'inspector', label: 'Inspector', icon: <Settings2 size={12} /> },
+                            { id: 'export', label: 'Export', icon: <Download size={12} /> }
                         ]}
                     >
                         <div style={{ display: rightTab === 'inspector' ? 'block' : 'none' }}>
@@ -329,39 +329,39 @@ export default function App() {
                                             {selectedObject.name || 'Selected Mesh'}
                                         </div>
                                         <div><div style={labelStyle}>POSITION</div><div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
-                                            <input type="number" step="0.1" value={selectedObject.position[0]} onChange={e=>updateObjectProp('position', parseFloat(e.target.value), 0)} style={coordInputStyle} />
-                                            <input type="number" step="0.1" value={selectedObject.position[1]} onChange={e=>updateObjectProp('position', parseFloat(e.target.value), 1)} style={coordInputStyle} />
-                                            <input type="number" step="0.1" value={selectedObject.position[2]} onChange={e=>updateObjectProp('position', parseFloat(e.target.value), 2)} style={coordInputStyle} />
+                                            <input type="number" step="0.1" value={selectedObject.position[0]} onChange={e => updateObjectProp('position', parseFloat(e.target.value), 0)} style={coordInputStyle} />
+                                            <input type="number" step="0.1" value={selectedObject.position[1]} onChange={e => updateObjectProp('position', parseFloat(e.target.value), 1)} style={coordInputStyle} />
+                                            <input type="number" step="0.1" value={selectedObject.position[2]} onChange={e => updateObjectProp('position', parseFloat(e.target.value), 2)} style={coordInputStyle} />
                                         </div></div>
                                         <div><div style={labelStyle}>ROTATION</div><div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
-                                            <input type="number" step="0.1" value={selectedObject.rotation[0]} onChange={e=>updateObjectProp('rotation', parseFloat(e.target.value), 0)} style={coordInputStyle} />
-                                            <input type="number" step="0.1" value={selectedObject.rotation[1]} onChange={e=>updateObjectProp('rotation', parseFloat(e.target.value), 1)} style={coordInputStyle} />
-                                            <input type="number" step="0.1" value={selectedObject.rotation[2]} onChange={e=>updateObjectProp('rotation', parseFloat(e.target.value), 2)} style={coordInputStyle} />
+                                            <input type="number" step="0.1" value={selectedObject.rotation[0]} onChange={e => updateObjectProp('rotation', parseFloat(e.target.value), 0)} style={coordInputStyle} />
+                                            <input type="number" step="0.1" value={selectedObject.rotation[1]} onChange={e => updateObjectProp('rotation', parseFloat(e.target.value), 1)} style={coordInputStyle} />
+                                            <input type="number" step="0.1" value={selectedObject.rotation[2]} onChange={e => updateObjectProp('rotation', parseFloat(e.target.value), 2)} style={coordInputStyle} />
                                         </div></div>
                                         <div><div style={labelStyle}>SCALE</div><div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
-                                            <input type="number" step="0.1" value={selectedObject.scale[0]} onChange={e=>updateObjectProp('scale', parseFloat(e.target.value), 0)} style={coordInputStyle} />
-                                            <input type="number" step="0.1" value={selectedObject.scale[1]} onChange={e=>updateObjectProp('scale', parseFloat(e.target.value), 1)} style={coordInputStyle} />
-                                            <input type="number" step="0.1" value={selectedObject.scale[2]} onChange={e=>updateObjectProp('scale', parseFloat(e.target.value), 2)} style={coordInputStyle} />
+                                            <input type="number" step="0.1" value={selectedObject.scale[0]} onChange={e => updateObjectProp('scale', parseFloat(e.target.value), 0)} style={coordInputStyle} />
+                                            <input type="number" step="0.1" value={selectedObject.scale[1]} onChange={e => updateObjectProp('scale', parseFloat(e.target.value), 1)} style={coordInputStyle} />
+                                            <input type="number" step="0.1" value={selectedObject.scale[2]} onChange={e => updateObjectProp('scale', parseFloat(e.target.value), 2)} style={coordInputStyle} />
                                         </div></div>
                                         {selectedObject.material && (
                                             <>
                                                 <div style={{ height: '1px', background: '#222', margin: '4px 0' }} />
                                                 <div><div style={labelStyle}>MATERIAL ALBEDO</div><div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
-                                                    <input type="number" step="0.05" min="0" max="1" value={selectedObject.material.color[0]} onChange={e=>updateObjectProp('matColor.0', parseFloat(e.target.value))} style={{...coordInputStyle, borderTop: '2px solid #ef4444'}} />
-                                                    <input type="number" step="0.05" min="0" max="1" value={selectedObject.material.color[1]} onChange={e=>updateObjectProp('matColor.1', parseFloat(e.target.value))} style={{...coordInputStyle, borderTop: '2px solid #22c55e'}} />
-                                                    <input type="number" step="0.05" min="0" max="1" value={selectedObject.material.color[2]} onChange={e=>updateObjectProp('matColor.2', parseFloat(e.target.value))} style={{...coordInputStyle, borderTop: '2px solid #3b82f6'}} />
+                                                    <input type="number" step="0.05" min="0" max="1" value={selectedObject.material.color[0]} onChange={e => updateObjectProp('matColor.0', parseFloat(e.target.value))} style={{ ...coordInputStyle, borderTop: '2px solid #ef4444' }} />
+                                                    <input type="number" step="0.05" min="0" max="1" value={selectedObject.material.color[1]} onChange={e => updateObjectProp('matColor.1', parseFloat(e.target.value))} style={{ ...coordInputStyle, borderTop: '2px solid #22c55e' }} />
+                                                    <input type="number" step="0.05" min="0" max="1" value={selectedObject.material.color[2]} onChange={e => updateObjectProp('matColor.2', parseFloat(e.target.value))} style={{ ...coordInputStyle, borderTop: '2px solid #3b82f6' }} />
                                                 </div></div>
-                                                <div style={rowStyle}><span>Smoothness:</span><input type="range" min="0" max="1" step="0.01" value={selectedObject.material.smoothness} onChange={e=>updateObjectProp('mat.smoothness', parseFloat(e.target.value))} /></div>
-                                                <div style={rowStyle}><span>Metallic:</span><input type="range" min="0" max="1" step="0.01" value={selectedObject.material.metallic} onChange={e=>updateObjectProp('mat.metallic', parseFloat(e.target.value))} /></div>
-                                                <div style={rowStyle}><span>Transparency:</span><input type="range" min="0" max="1" step="0.01" value={selectedObject.material.transparency} onChange={e=>updateObjectProp('mat.transparency', parseFloat(e.target.value))} /></div>
-                                                <div style={rowStyle}><span>IOR:</span><input type="number" step="0.05" style={{...inputStyle, width: '60px'}} value={selectedObject.material.ior} onChange={e=>updateObjectProp('mat.ior', parseFloat(e.target.value))} /></div>
+                                                <div style={rowStyle}><span>Smoothness:</span><input type="range" min="0" max="1" step="0.01" value={selectedObject.material.smoothness} onChange={e => updateObjectProp('mat.smoothness', parseFloat(e.target.value))} /></div>
+                                                <div style={rowStyle}><span>Metallic:</span><input type="range" min="0" max="1" step="0.01" value={selectedObject.material.metallic} onChange={e => updateObjectProp('mat.metallic', parseFloat(e.target.value))} /></div>
+                                                <div style={rowStyle}><span>Transparency:</span><input type="range" min="0" max="1" step="0.01" value={selectedObject.material.transparency} onChange={e => updateObjectProp('mat.transparency', parseFloat(e.target.value))} /></div>
+                                                <div style={rowStyle}><span>IOR:</span><input type="number" step="0.05" style={{ ...inputStyle, width: '60px' }} value={selectedObject.material.ior} onChange={e => updateObjectProp('mat.ior', parseFloat(e.target.value))} /></div>
                                             </>
                                         )}
                                     </div>
                                 ) : (
                                     <div style={{ color: '#666', fontSize: '11px', fontStyle: 'italic', textAlign: 'center', marginTop: '40px' }}>
                                         <Settings2 size={32} style={{ margin: '0 auto 12px', opacity: 0.2 }} />
-                                        Select an object from the outliner<br/>to edit its precise properties.
+                                        Select an object from the outliner<br />to edit its precise properties.
                                     </div>
                                 )}
                             </div>
@@ -371,13 +371,27 @@ export default function App() {
                             <div style={{ padding: '16px' }}>
                                 <button id="btnToggleRT" style={{ ...fullBtnStyle, background: '#6366f1', color: 'white', border: 'none' }}>Enable Ray Tracing (T)</button>
                                 <button id="btnToggleDoF" style={{ ...fullBtnStyle, marginTop: '8px' }}>Disable Focus Blur (B)</button>
-                                
+
                                 <div style={{ height: '1px', background: '#222', margin: '16px 0' }} />
                                 <div style={{ fontSize: '11px', fontWeight: 'bold', marginBottom: '12px', color: '#888' }}>RENDER PIPELINE</div>
 
                                 <div style={rowStyle}><span>BVH Builder:</span><select id="selBVHMethod" style={inputStyle}><option value="spatial">Spatial Median</option><option value="sah">Binned SAH</option></select></div>
-                                <div style={rowStyle}><span>RT Technique:</span><select id="selRTTechnique" style={inputStyle}><option value="0">Classic Path Tracing</option><option value="1">ReSTIR GI</option></select></div>
-                                <div style={rowStyle}><span>Preview Denoiser:</span><select id="selPreviewDenoiser" style={inputStyle} defaultValue="rt_hdr_alb_nrm"><option value="none">None</option><option value="spatial">Fast Spatial</option><option value="rt_hdr">rt_hdr.tza</option><option value="rt_hdr_alb_nrm">rt_hdr_alb_nrm.tza</option></select></div>
+                                <div style={rowStyle}><span>RT Technique:</span><select id="selRTTechnique" style={inputStyle}><option value="0">Classic Path Tracing</option><option value="1">ReSTIR GI</option><option value="2">Radiance Cascades</option></select></div>
+                                <div style={rowStyle}><span>Preview Denoiser:</span><select id="selPreviewDenoiser" style={inputStyle} defaultValue="rt_hdr_alb_nrm">
+                                    <option value="none">None</option>
+                                    <option value="spatial">Fast Spatial</option>
+                                    <optgroup label="OIDN Color Only">
+                                        <option value="rt_hdr">rt_hdr.tza</option>
+                                        <option value="rt_hdr_small">rt_hdr_small.tza (Fast)</option>
+                                    </optgroup>
+                                    <optgroup label="OIDN Color + Albedo + Normal">
+                                        <option value="rt_hdr_alb_nrm">rt_hdr_alb_nrm.tza</option>
+                                        <option value="rt_hdr_alb_nrm_small">rt_hdr_alb_nrm_small.tza (Fast)</option>
+                                        <option value="rt_hdr_calb_cnrm_large">rt_hdr_calb_cnrm_large.tza (Clean)</option>
+                                        <option value="rt_hdr_calb_cnrm">rt_hdr_calb_cnrm.tza (Clean)</option>
+                                        <option value="rt_hdr_calb_cnrm_small">rt_hdr_calb_cnrm_small.tza (Fast Clean)</option>
+                                    </optgroup>
+                                </select></div>
                                 <div style={rowStyle}><span>Sky Intensity:</span><input id="uiSkyIntensity" type="range" min="0" max="10" defaultValue="1.0" step="0.1" /><span id="skyIntensityVal" style={valStyle}>1.0</span></div>
                                 <div style={rowStyle}><span>GI Multiplier:</span><input id="uiGIMultiplier" type="range" min="0" max="5" defaultValue="1.0" step="0.1" /><span id="giMultiplierVal" style={valStyle}>1.0</span></div>
                                 <div style={rowStyle}><span>Preview Samples:</span><input id="inpPreviewSpp" type="number" defaultValue="4" style={inputStyle} /></div>
@@ -385,10 +399,10 @@ export default function App() {
 
                                 <div style={{ height: '1px', background: '#222', margin: '16px 0' }} />
                                 <div style={{ fontSize: '11px', fontWeight: 'bold', marginBottom: '12px', color: '#888' }}>VIRTUAL CAMERA</div>
-                            
+
                                 <div style={rowStyle}><span>Model:</span><select id="selCamModel" style={inputStyle}><option value="0">Perspective</option><option value="1">Orthographic</option><option value="4">2-Point Perspective</option></select></div>
                                 <div id="rowFov" style={rowStyle}><span>FOV:</span><input id="uiFov" type="range" min="10" max="180" defaultValue="45" step="1" /><span id="fovVal" style={valStyle}>45°</span></div>
-                                <div id="rowOrthoScale" style={{...rowStyle, display: 'none'}}><span>Ortho Scale:</span><input id="uiOrthoScale" type="range" min="1" max="50" defaultValue="10" /><span id="orthoScaleVal" style={valStyle}>10.0</span></div>
+                                <div id="rowOrthoScale" style={{ ...rowStyle, display: 'none' }}><span>Ortho Scale:</span><input id="uiOrthoScale" type="range" min="1" max="50" defaultValue="10" /><span id="orthoScaleVal" style={valStyle}>10.0</span></div>
                                 <div id="rowLensShiftX" style={rowStyle}><span>Lens Shift X:</span><input id="uiLensShiftX" type="range" min="-1" max="1" defaultValue="0" step="0.01" /><span id="lensShiftXVal" style={valStyle}>0.00</span></div>
                                 <div id="rowLensShiftY" style={rowStyle}><span>Lens Shift Y:</span><input id="uiLensShiftY" type="range" min="-1" max="1" defaultValue="0" step="0.01" /><span id="lensShiftYVal" style={valStyle}>0.00</span></div>
                                 <div style={rowStyle}><span>Aperture:</span><input id="uiAperture" type="range" min="0" max="1" defaultValue="0.10" step="0.01" /><span id="apertureVal" style={valStyle}>0.10</span></div>
@@ -408,13 +422,27 @@ export default function App() {
 
                                 <div style={rowStyle}><span>Resolution:</span><select id="selResolution" style={inputStyle} defaultValue="1280x720"><option value="720x480">720 x 480</option><option value="1280x720">1280 x 720</option><option value="1920x1080">1920 x 1080</option></select></div>
                                 <div style={rowStyle}><span>Tile Size:</span><select id="selTileSize" style={inputStyle} defaultValue="0"><option value="0">Disable Tiling</option><option value="256">256 x 256</option></select></div>
-                                <div style={rowStyle}><span>Denoiser:</span><select id="selOfflineDenoiser" style={inputStyle} defaultValue="rt_hdr_alb_nrm"><option value="none">None</option><option value="rt_hdr_alb_nrm">rt_hdr_alb_nrm.tza</option></select></div>
+                                <div style={rowStyle}><span>Denoiser:</span><select id="selOfflineDenoiser" style={inputStyle} defaultValue="rt_hdr_alb_nrm">
+                                    <option value="none">None</option>
+                                    <option value="spatial">Fast Spatial</option>
+                                    <optgroup label="OIDN Color Only">
+                                        <option value="rt_hdr">rt_hdr.tza</option>
+                                        <option value="rt_hdr_small">rt_hdr_small.tza (Fast)</option>
+                                    </optgroup>
+                                    <optgroup label="OIDN Color + Albedo + Normal">
+                                        <option value="rt_hdr_alb_nrm">rt_hdr_alb_nrm.tza</option>
+                                        <option value="rt_hdr_alb_nrm_small">rt_hdr_alb_nrm_small.tza (Fast)</option>
+                                        <option value="rt_hdr_calb_cnrm_large">rt_hdr_calb_cnrm_large.tza (Clean)</option>
+                                        <option value="rt_hdr_calb_cnrm">rt_hdr_calb_cnrm.tza (Clean)</option>
+                                        <option value="rt_hdr_calb_cnrm_small">rt_hdr_calb_cnrm_small.tza (Fast Clean)</option>
+                                    </optgroup>
+                                </select></div>
                                 <div style={rowStyle}><span>Max Bounces:</span><input id="inpOfflineBounces" type="number" defaultValue="5" style={inputStyle} /></div>
                                 <div style={rowStyle}><span>FPS:</span><input id="inpFps" type="number" defaultValue="30" style={inputStyle} /></div>
                                 <div style={rowStyle}><span>Duration (s):</span><input id="inpDur" type="number" defaultValue="15" style={inputStyle} /></div>
                                 <div style={rowStyle}><span>Samples/Frame:</span><input id="inpSpp" type="number" defaultValue="128" style={inputStyle} /></div>
                                 <div style={rowStyle}><span>Use Interaction:</span><input id="chkUseInteraction" type="checkbox" /></div>
-                                
+
                                 <button id="btnRender" style={{ ...fullBtnStyle, background: '#10b981', color: '#fff', marginTop: '24px', border: 'none', padding: '12px' }}>Start Offline Render</button>
                             </div>
                         </div>

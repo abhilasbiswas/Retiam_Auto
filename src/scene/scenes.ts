@@ -307,6 +307,7 @@ export class Scene {
             const hasTracks = this.interactionManager.tracks.length > 0;
             document.getElementById('btnExportInteraction').disabled = !hasTracks;
             document.getElementById('btnClearInteraction').disabled = !hasTracks;
+            document.getElementById('btnPlayInteraction').disabled = !hasTracks;
             document.getElementById('chkUseInteraction').checked = hasTracks;
 
             // Render Track List
@@ -379,6 +380,30 @@ export class Scene {
             document.getElementById('btnRecordInteraction').disabled = false;
             document.getElementById('btnStopRecord').disabled = true;
             updateInteractionUI();
+        });
+
+        // Dedicated Replay Button: Rewinds the main timeline and hits play
+        document.getElementById('btnPlayInteraction').addEventListener('click', async () => {
+            // Find earliest event in active tracks
+            let minStart = 0;
+            this.interactionManager.tracks.forEach(t => {
+                if (t.isEnabled && t.recording && t.recording.events.length > 0) {
+                    const firstEvt = t.recording.events[0].t;
+                    if (minStart === 0 || firstEvt < minStart) minStart = firstEvt;
+                }
+            });
+            // Rewind slightly before the first action, or to 0
+            const rewindTime = Math.max(0, minStart - 0.5);
+            
+            await this.rebuildScene(rewindTime);
+            document.getElementById('scrubber').value = rewindTime;
+            
+            const btnPlay = document.getElementById('btnPlay');
+            if (!this.isPlaying) {
+                btnPlay.click(); // Trigger main timeline play
+            } else {
+                this.interactionManager.play(); // Already playing, just ensure interaction manager is active
+            }
         });
 
         document.getElementById('btnExportInteraction').addEventListener('click', () => {

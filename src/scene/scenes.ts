@@ -71,16 +71,21 @@ export class Scene {
         } else {
             this.frameCount = 0;
         }
+
+        populateSceneGraph(this.mobjects);
     }
 
     remove(...objs) {
         let needsBake = false;
+        let didRemove = false;
         objs.forEach(o => {
             const index = this.mobjects.indexOf(o);
-            if (index !== -1) { this.mobjects.splice(index, 1); if (o.triangles) needsBake = true; }
+            if (index !== -1) { this.mobjects.splice(index, 1); didRemove = true; if (o.triangles) needsBake = true; }
         });
         if (this.engine && needsBake) this.engine.bakeMeshes(this.mobjects);
         this.frameCount = 0;
+
+        if (didRemove) populateSceneGraph(this.mobjects);
     }
 
     _stepTimeline(dt) {
@@ -605,6 +610,10 @@ export class Scene {
             if (this.interactionManager.applyEventsForTime(this.clock, this.mobjects)) {
                 isAnimating = true;
             }
+        }
+
+        if (isAnimating) {
+            window.dispatchEvent(new CustomEvent('playback-tick'));
         }
 
         if (isAnimating || this.isScrubbing()) {

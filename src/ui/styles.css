@@ -1,0 +1,104 @@
+/* Reset & Foundations */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background: #121212;
+    color: #e0e0e0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    overflow: hidden;
+}
+
+/* Custom Scrollbars for dark mode */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: #101010;
+}
+::-webkit-scrollbar-thumb {
+    background: #333;
+    border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+/* Base Interactions */
+input[type="range"] {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    background: #111;
+    border: 1px solid #333;
+    height: 6px;
+    border-radius: 3px;
+    outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    background: #6366f1;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.1s;
+}
+input[type="range"]::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+}
+
+select {
+    cursor: pointer;
+}
+
+button {
+    transition: all 0.2s;
+}
+button:hover:not(:disabled) {
+    border-color: #888 !important;
+}
+button:active:not(:disabled) {
+    transform: scale(0.95);
+}
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Timeline & Active States */
+.active {
+    background: rgba(99, 102, 241, 0.4) !important;
+    border-color: #6366f1 !important;
+    color: #a5b4fc !important;
+}
+
+/* VS Code Resizable Panel Splitter */
+.ResizeHandleHorizontal {
+    width: 2px;
+    background-color: transparent;
+    cursor: col-resize;
+    z-index: 100;
+    transition: background-color 0.1s ease;
+}
+.ResizeHandleHorizontal:hover,
+.ResizeHandleHorizontal[data-resize-handle-active] {
+    background-color: #6366f1;
+}
+
+.ResizeHandleVertical {
+    height: 2px;
+    background-color: transparent;
+    cursor: row-resize;
+    z-index: 100;
+    transition: background-color 0.1s ease;
+}
+.ResizeHandleVertical:hover,
+.ResizeHandleVertical[data-resize-handle-active] {
+    background-color: #6366f1;
+}

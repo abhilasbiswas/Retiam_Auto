@@ -1,18 +1,10 @@
 // @ts-nocheck
 
 export function populateSceneGraph(mobjects) {
-    const container = document.getElementById('scene-graph');
-    if (!container) return;
-    container.innerHTML = '';
-    let idCounter = 1;
-    const addNode = (obj, parentDiv, depth) => {
-        let name = obj.isMorphing ? "Morph Target" : (obj.triangles ? "Polygonal Mesh" : (obj.radius ? "Analytic Sphere" : "Group"));
-        const el = document.createElement('div'); el.className = 'hierarchy-item'; el.style.paddingLeft = (depth * 15 + 8) + 'px';
-        let icon = '⬡'; if (obj.radius) icon = '⭕'; else if (obj.isVector) icon = '📝'; else if (obj.isMorphing) icon = '💧';
-        el.innerHTML = `<span class="hierarchy-icon">${icon}</span> ${name} ${idCounter++}`; parentDiv.appendChild(el);
-        if (obj.children && obj.children.length > 0) { obj.children.forEach(c => addNode(c, parentDiv, depth + 1)); }
-    };
-    mobjects.forEach(m => addNode(m, container, 0));
+    if (typeof window !== 'undefined') {
+        window._scene_mobjects = mobjects;
+        window.dispatchEvent(new CustomEvent('mobjects-updated'));
+    }
 }
 
 export function drawGimbal(camera) {

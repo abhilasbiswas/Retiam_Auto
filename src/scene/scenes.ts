@@ -405,12 +405,25 @@ export class Scene {
             this.interactionManager.startRecording(this.clock);
             document.getElementById('btnRecordInteraction').disabled = true;
             document.getElementById('btnStopRecord').disabled = false;
+            
+            // Sync with presentation buttons
+            const btnPres = document.getElementById('btnPresentation');
+            const btnStopPres = document.getElementById('btnStopPresentation');
+            if (btnPres) btnPres.disabled = true;
+            if (btnStopPres) btnStopPres.disabled = false;
         });
 
         document.getElementById('btnStopRecord').addEventListener('click', () => {
             this.interactionManager.stopRecording();
             document.getElementById('btnRecordInteraction').disabled = false;
             document.getElementById('btnStopRecord').disabled = true;
+            
+            // Sync with presentation buttons
+            const btnPres = document.getElementById('btnPresentation');
+            const btnStopPres = document.getElementById('btnStopPresentation');
+            if (btnPres) btnPres.disabled = false;
+            if (btnStopPres) btnStopPres.disabled = true;
+
             updateInteractionUI();
         });
 
@@ -491,6 +504,40 @@ export class Scene {
             this.isPlaying = false; btnPlay.innerText = "▶"; btnPlay.classList.remove('active');
             this.interactionManager.stop();
             this.rebuildScene(0);
+        });
+
+        const btnPresentation = document.getElementById('btnPresentation');
+        const btnStopPresentation = document.getElementById('btnStopPresentation');
+
+        btnPresentation.addEventListener('click', async () => {
+            this.isPlaying = true;
+            btnPlay.innerText = "⏸";
+            btnPlay.classList.add('active');
+
+            await this.rebuildScene(0);
+            this.interactionManager.startRecording(0);
+
+            btnPresentation.disabled = true;
+            btnStopPresentation.disabled = false;
+            
+            // Sync with other record buttons if they exist
+            document.getElementById('btnRecordInteraction').disabled = true;
+            document.getElementById('btnStopRecord').disabled = false;
+        });
+
+        btnStopPresentation.addEventListener('click', () => {
+            this.interactionManager.stopRecording();
+            this.isPlaying = false;
+            btnPlay.innerText = "▶"; btnPlay.classList.remove('active');
+
+            btnPresentation.disabled = false;
+            btnStopPresentation.disabled = true;
+            
+            // Sync with other record buttons
+            document.getElementById('btnRecordInteraction').disabled = false;
+            document.getElementById('btnStopRecord').disabled = true;
+            
+            updateInteractionUI();
         });
 
         btnLoop.addEventListener('click', () => {

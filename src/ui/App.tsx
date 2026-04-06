@@ -275,6 +275,9 @@ export default function App() {
                                             <button id="btnStop" style={btnStyle}>■ Stop</button>
                                             <button id="btnLoop" style={btnStyle}>🔁 Loop</button>
                                             <div style={{ width: '1px', height: '20px', background: '#333' }}></div>
+                                            <button id="btnPresentation" style={{ ...btnStyle, color: '#f59e0b', borderColor: 'rgba(245, 158, 11, 0.3)' }}>📽 Presentation</button>
+                                            <button id="btnStopPresentation" style={btnStyle} disabled>⏹ Stop</button>
+                                            <div style={{ width: '1px', height: '20px', background: '#333' }}></div>
                                             <span style={labelStyle}>IN:</span><input id="inpLoopStart" type="number" defaultValue="0.0" step="0.5" min="0" style={inputStyle} />
                                             <span style={labelStyle}>OUT:</span><input id="inpLoopEnd" type="number" defaultValue="15.0" step="0.5" min="0" style={inputStyle} />
                                             <div style={{ width: '1px', height: '20px', background: '#333' }}></div>

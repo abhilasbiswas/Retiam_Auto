@@ -374,6 +374,10 @@ export default function App() {
                             <div style={{ padding: '16px' }}>
                                 <button id="btnToggleRT" style={{ ...fullBtnStyle, background: '#6366f1', color: 'white', border: 'none' }}>Enable Ray Tracing (T)</button>
                                 <button id="btnToggleDoF" style={{ ...fullBtnStyle, marginTop: '8px' }}>Disable Focus Blur (B)</button>
+                                <div style={{ ...rowStyle, marginTop: '12px', borderTop: '1px solid #222', paddingTop: '10px' }}>
+                                    <span>Legacy Materials (Auto-Metal):</span>
+                                    <input type="checkbox" id="chkLegacyMetal" defaultChecked={true} onChange={() => { if (sceneRef.current) (sceneRef.current as any).frameCount = 0; }} />
+                                </div>
 
                                 <div style={{ height: '1px', background: '#222', margin: '16px 0' }} />
                                 <div style={{ fontSize: '11px', fontWeight: 'bold', marginBottom: '12px', color: '#888' }}>RENDER PIPELINE</div>

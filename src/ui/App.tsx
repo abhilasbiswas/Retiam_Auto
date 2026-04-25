@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from 'react-resizable-panels';
 // @ts-ignore
 import { Settings, Layers, Box, Film, SlidersHorizontal, Settings2, Download } from 'lucide-react';
-import { VoxelRoomScene, Scene } from '../scene/scenes';
+import { VoxelRoomScene, Scene, CornellBoxScene } from '../scene/scenes';
 
 const TabContainer = ({ tabs, activeTab, onTabSelect, children }: any) => (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', background: '#111' }}>
@@ -52,7 +52,7 @@ export default function App() {
             isInit.current = true;
             const bootEngine = async () => {
                 console.log("WebGPU React Engine Booting...");
-                const scene = new VoxelRoomScene();
+                const scene = new CornellBoxScene();
                 sceneRef.current = scene;
                 try {
                     if (document.getElementById('canvas')) await scene.run();

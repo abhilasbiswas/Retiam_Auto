@@ -92,7 +92,7 @@
             var bounceRay = Ray(hitPoint + dirToScreen * 0.001, dirToScreen, 1.0 / dirToScreen);
             totalColor += trace_bounces(bounceRay, &rngState);
         } else {
-            var bounceRay = Ray(hitPoint + hitNormal * 0.002, vec3(0.0), vec3(0.0));
+            var bounceRay = Ray(hitPoint, vec3(0.0), vec3(0.0));
             var pdf = 1.0;
 
             // F0 for G-buffer material — matches bsdf_scatter_opaque path selection
@@ -111,6 +111,8 @@
                 bounceRay.dir = normalize(hitNormal + rand_unit_vector(&rngState));
                 pdf = max(1.0 - p_spec, 0.001);
             }
+            
+            bounceRay.origin = hitPoint + hitNormal * 0.001 + bounceRay.dir * 0.002;
             bounceRay.invDir = 1.0 / bounceRay.dir;
 
             var incomingLight = vec3<f32>(0.0);

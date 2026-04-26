@@ -170,8 +170,9 @@ fn bsdf_scatter_opaque(
         throughput = hit.mat.color * kD / (1.0 - p_spec);
     }
 
-    (*ray).origin  = hit.point + N * 0.001;
     (*ray).dir     = normalize(new_dir);
+    // Robust self-intersection avoidance: offset along normal, and push forward along outgoing ray
+    (*ray).origin  = hit.point + N * 0.001 + (*ray).dir * 0.002;
     (*ray).invDir  = 1.0 / (*ray).dir;
     return max(throughput, vec3<f32>(0.0));
 }
@@ -203,15 +204,16 @@ fn bsdf_scatter_transmit(
     if (eta * sin_theta > 1.0 || rand_float(rng) < F) {
         // Total internal reflection OR Fresnel reflection
         new_dir = reflect((*ray).dir, N);
-        (*ray).origin = hit.point + N * 0.001;
+        (*ray).dir    = normalize(new_dir);
+        (*ray).origin = hit.point + N * 0.001 + (*ray).dir * 0.002;
         is_external_reflection = entering;
     } else {
         // Snell's law refraction
         new_dir = refract(normalize((*ray).dir), N, eta);
-        (*ray).origin = hit.point - N * 0.001;
+        (*ray).dir    = normalize(new_dir);
+        (*ray).origin = hit.point - N * 0.001 + (*ray).dir * 0.002;
     }
 
-    (*ray).dir    = normalize(new_dir);
     (*ray).invDir = 1.0 / (*ray).dir;
     
     if (is_external_reflection) {

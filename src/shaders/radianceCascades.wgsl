@@ -199,15 +199,31 @@ fn compute_level(level: u32, gridPos: vec3<i32>, angID: vec2<i32>) {
     // Completely Deterministic Segment Ray
     if (hit.hit && hit.dist <= l_max) {
         radiance = hit.mat.emColor * hit.mat.emStrength;
-        
-        // GI BOUNCE via Double Buffering
-        // Re-enabled, but now reading exclusively from PREVIOUS frame's tensor
-        // to prevent instantaneous data races and explosive energy loops.
-        if (hit.mat.smoothness < 0.5 && hit.mat.emStrength < 0.001) {
-             let albedo = hit.mat.color;
-             let bounceRad = samplePrevCascade_5D(0u, hit.point + hit.normal * 0.1, hit.normal);
-             // Pure conservation of energy: albedo * bounceRad must be < 1.0 to avoid nuclear explosion.
-             radiance += albedo * bounceRad;
+
+        if (hit.mat.emStrength < 0.001) {
+            // GI BOUNCE via Double Buffering — read only from PREVIOUS frame to avoid data races
+            let albedo = hit.mat.color;
+
+            if (hit.mat.roughness > 0.5) {
+                // MATTE DIFFUSE: sample cascade in normal direction
+                let bounceRad = samplePrevCascade_5D(0u, hit.point + hit.normal * 0.1, hit.normal);
+                // Energy conservation: diffuse receives (1 - F0) * (1 - metallic) fraction
+                let kD = (1.0 - hit.mat.metallic);
+                radiance += albedo * kD * bounceRad;
+            } else {
+                // GLOSSY / MIRROR: sample cascade in reflected direction
+                let reflDir = reflect(rayDir, hit.normal);
+                let bounceRad = samplePrevCascade_5D(0u, hit.point + hit.normal * 0.1, reflDir);
+                // Metals tint reflection by albedo; dielectrics get white reflection
+                let specColor = mix(vec3<f32>(0.04), albedo, hit.mat.metallic);
+                radiance += specColor * bounceRad;
+
+                // Add a small diffuse contribution for non-perfectly-smooth glossy surfaces
+                if (hit.mat.roughness > 0.1) {
+                    let diffRad = samplePrevCascade_5D(0u, hit.point + hit.normal * 0.1, hit.normal);
+                    radiance += albedo * (1.0 - hit.mat.metallic) * hit.mat.roughness * diffRad * 0.5;
+                }
+            }
         }
     } else {
         if (level < 3u) {
@@ -308,7 +324,7 @@ fn compute_level(level: u32, gridPos: vec3<i32>, angID: vec2<i32>) {
 
     // Iterative Ray Bouncing for Glass Refraction (Max 4 bounces to pass completely through objects)
     for (var b = 0u; b < 4u; b++) {
-        if (primaryHit.hit && primaryHit.mat.trans > 0.5) {
+        if (primaryHit.hit && primaryHit.mat.transmission > 0.5) {
             if (!isGlass) {
                 // First hit sets the environmental geometric reflection for the glass surface
                 isGlass = true;
@@ -377,7 +393,9 @@ fn compute_level(level: u32, gridPos: vec3<i32>, angID: vec2<i32>) {
     var indirect = vec3<f32>(0.0);
     var specularIndirect = vec3<f32>(0.0); // Deterministic specular tracking
     let viewDir = normalize(cam.pos.xyz - wPos);
-    let specPower = exp2(10.0 * primaryHit.mat.smoothness + 1.0);
+    // specPower: high roughness = diffuse (low power), low roughness = tight highlight
+    let smoothness = 1.0 - primaryHit.mat.roughness;
+    let specPower = exp2(10.0 * smoothness + 1.0);
     
     // Completely NOISE-FREE deterministic angular evaluation
     let numSamples = 16u; 
@@ -420,10 +438,10 @@ fn compute_level(level: u32, gridPos: vec3<i32>, angID: vec2<i32>) {
         indirect += incomingRadiance * weight;
         
         // Evaluate deterministic Specular BRDF over the cascade traces for glossy materials
-        if (primaryHit.mat.smoothness <= 0.9) {
+        if (primaryHit.mat.roughness <= 0.1) {  // only for low-roughness (glossy) surfaces
             let H = normalize(viewDir + dir);
             let NdotH = max(dot(n, H), 0.0);
-            let specIntensity = pow(NdotH, specPower) * primaryHit.mat.smoothness;
+            let specIntensity = pow(NdotH, specPower) * smoothness;
             specularIndirect += incomingRadiance * specIntensity * weight;
         }
         
@@ -436,8 +454,8 @@ fn compute_level(level: u32, gridPos: vec3<i32>, angID: vec2<i32>) {
     
     // SPECULAR REFLECTION LOBE
     var specularFinal = vec3<f32>(0.0);
-    if (primaryHit.mat.smoothness > 0.3) {
-        // Noise-Free Mirror Reflection for reflective materials
+    if (primaryHit.mat.roughness < 0.7) {  // smoothness > 0.3 equivalent
+        // Specular reflection lobe — only for low-roughness surfaces
         let perfectRefDir = reflect(-viewDir, primaryHit.normal);
         var refRay = Ray(primaryHit.point + primaryHit.normal * 0.02, perfectRefDir, 1.0/(perfectRefDir + 0.00001));
         let refHit = worldHit(refRay, &rngState);
@@ -456,12 +474,12 @@ fn compute_level(level: u32, gridPos: vec3<i32>, angID: vec2<i32>) {
         let F0 = mix(vec3(0.04), primaryHit.mat.color, primaryHit.mat.metallic);
         var F = F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
         
-        // Reflectivity floor: ensures polished surfaces always show visible reflections
-        let smoothSq = primaryHit.mat.smoothness * primaryHit.mat.smoothness;
+        // Reflectivity: clamp to roughness-squared minimum so polished surfaces remain visible
+        let smoothSq = smoothness * smoothness;
         F = max(F, vec3<f32>(smoothSq));
         
-        // Purely ADDITIVE specular — reflections can only brighten, never darken
-        diffuseFinal = diffuseFinal + F * primaryHit.mat.smoothness * specularFinal;
+        // Additive specular — reflections only brighten, weighted by smoothness
+        diffuseFinal = diffuseFinal + F * smoothness * specularFinal;
     }
     
     var finalColor = diffuseFinal;

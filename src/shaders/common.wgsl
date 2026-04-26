@@ -28,7 +28,17 @@
             }
             
             struct Ray { origin: vec3<f32>, dir: vec3<f32>, invDir: vec3<f32> }
-            struct Material { color: vec3<f32>, smoothness: f32, emColor: vec3<f32>, emStrength: f32, trans: f32, ior: f32, metallic: f32 }
+            struct Material {
+                color:        vec3<f32>,
+                roughness:    f32,       // 0 = mirror, 1 = fully rough (was 'smoothness')
+                emColor:      vec3<f32>,
+                emStrength:   f32,
+                transmission: f32,       // glass weight (was 'transparency')
+                ior:          f32,
+                metallic:     f32,
+                specular:     f32,       // dielectric F0 level: 0.5 = 4% (Blender default)
+                opacity:      f32,       // stochastic alpha cutout
+            }
 
             // --- ReSTIR Reservoir Data Structure ---
             struct Reservoir {
@@ -77,133 +87,11 @@
                 }
             }
             
-            // fn eval_contribution(dir: vec3<f32>, L_i: vec3<f32>, normal: vec3<f32>, albedo: vec3<f32>, smoothness: f32, viewDir: vec3<f32>) -> vec3<f32> {
-            //     if (dot(normal, dir) <= 0.0) { return vec3<f32>(0.0); }
-            //     let specColor = mix(vec3<f32>(1.0), albedo, smoothness);
-            //     let expected_brdf_weight = mix(albedo, specColor, smoothness);
-            //     return expected_brdf_weight * L_i;
-            // }
-
-            fn eval_contribution(dir: vec3<f32>, L_i: vec3<f32>, normal: vec3<f32>, albedo: vec3<f32>, smoothness: f32, metallic: f32, viewDir: vec3<f32>) -> vec3<f32> {
-                if (dot(normal, dir) <= 0.0) { return vec3<f32>(0.0); }
-                
-                // USE METALLIC HERE: 0.0 = White reflection (Plastic), 1.0 = Colored reflection (Metal)
-                let specColor = mix(vec3<f32>(1.0), albedo, metallic);
-                let expected_brdf_weight = mix(albedo, specColor, smoothness);
-                
-                return expected_brdf_weight * L_i;
-            }
+            // NOTE: All BRDF evaluation logic has been moved to brdf.wgsl
+            // eval_bsdf() replaces the old eval_contribution()
+            // bsdf_scatter() replaces the old inline scattering logic
 
 
-            // fn eval_contribution(L: vec3<f32>, L_i: vec3<f32>, N: vec3<f32>, albedo: vec3<f32>, smoothness: f32, V: vec3<f32>) -> vec3<f32> {
-            //     let NdotL = dot(N, L);
-            //     // If light is behind the surface, there is no contribution
-            //     if (NdotL <= 0.0) { return vec3<f32>(0.0); }
-                
-            //     // Clamp NdotV to prevent division by zero artifacts at grazing angles
-            //     let NdotV = max(dot(N, V), 0.0001);
-                
-            //     let H = normalize(V + L);
-            //     let NdotH = max(dot(N, H), 0.0);
-            //     let VdotH = max(dot(V, H), 0.0);
-                
-            //     // Perceptual smoothness to linear roughness (Disney/Epic mapping)
-            //     // Clamped to 0.02 to prevent extreme specular fireflies in ReSTIR
-            //     let roughness = clamp(1.0 - smoothness, 0.02, 1.0);
-            //     let alpha = roughness * roughness;
-            //     let alpha2 = alpha * alpha;
-                
-            //     let PI = 3.14159265359;
-                
-            //     // --- 1. Fresnel (Schlick's Approximation) ---
-            //     // F0 is base reflectivity. 0.04 is the standard for dielectrics (plastics/glass).
-            //     // Note: If you add a 'metallic' property later, change this to: mix(vec3(0.04), albedo, metallic)
-            //     let F0 = vec3<f32>(0.04);
-            //     let F = F0 + (1.0 - F0) * pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);
-                
-            //     // --- 2. Normal Distribution Function (GGX) ---
-            //     // Determines the alignment of microfacets towards the Half-vector
-            //     let denom = (NdotH * NdotH * (alpha2 - 1.0) + 1.0);
-            //     let D = alpha2 / (PI * denom * denom);
-                
-            //     // --- 3. Geometry / Shadowing-Masking (Smith-Schlick GGX) ---
-            //     // For indirect GI (which ReSTIR handles), k = alpha / 2.0 is mathematically correct
-            //     let k = alpha / 2.0; 
-            //     let ggx1 = NdotV / (NdotV * (1.0 - k) + k);
-            //     let ggx2 = NdotL / (NdotL * (1.0 - k) + k);
-            //     let G = ggx1 * ggx2;
-                
-            //     // --- 4. Cook-Torrance Specular Lobe ---
-            //     let specular = (D * F * G) / (4.0 * NdotV * NdotL + 0.0001);
-                
-            //     // --- 5. Energy Conserving Diffuse (Lambert) ---
-            //     // Whatever energy is reflected by specular (F) cannot enter the surface to become diffuse
-            //     let kS = F;
-            //     let kD = vec3<f32>(1.0) - kS; 
-            //     let diffuse = kD * (albedo / PI);
-                
-            //     // --- Final BRDF ---
-            //     let brdf = diffuse + specular;
-                
-            //     // The Rendering Equation: BRDF * Radiance * cos(theta)
-            //     return brdf * L_i * NdotL;
-            // }
-
-
-            //Fast
-            // Locate this inside your wgsl_common string
-            // fn eval_contribution(dir: vec3<f32>, L_i: vec3<f32>, normal: vec3<f32>, albedo: vec3<f32>, smoothness: f32, viewDir: vec3<f32>) -> vec3<f32> {
-            //     let NdotL = max(dot(normal, dir), 0.0);
-            //     if (NdotL <= 0.0) { return vec3<f32>(0.0); }
-
-            //     let H = normalize(viewDir + dir);
-            //     let NdotH = max(dot(normal, H), 0.0);
-            //     let VdotH = max(dot(viewDir, H), 0.0);
-
-            //     // Roughness mapping (squared for perceptual linearity)
-            //     let alpha = max((1.0 - smoothness) * (1.0 - smoothness), 0.001);
-            //     let alpha2 = alpha * alpha;
-
-            //     // Fast Fresnel (Multiplication instead of Pow)
-            //     let fc = 1.0 - VdotH;
-            //     let fc2 = fc * fc;
-            //     let fc5 = fc2 * fc2 * fc;
-            //     let F = vec3<f32>(0.04) + vec3<f32>(0.96) * fc5; 
-
-            //     // Fast GGX Normal Distribution
-            //     let denom = NdotH * NdotH * (alpha2 - 1.0) + 1.0;
-            //     let D = alpha2 / (3.1415926 * denom * denom);
-
-            //     // Ultra-Fast Specular (Denominator cancelled by Implicit G)
-            //     let specular = (D * F) * 0.25;
-
-            //     // Energy Conserving Diffuse (Lambert)
-            //     let kD = (vec3<f32>(1.0) - F);
-            //     let diffuse = kD * albedo * 0.318309; // 0.318309 is 1/PI
-
-            //     return (diffuse + specular) * L_i * NdotL;
-            // }
-
-// fn eval_contribution(L: vec3<f32>, L_i: vec3<f32>, N: vec3<f32>, albedo: vec3<f32>, smoothness: f32, V: vec3<f32>) -> vec3<f32> {
-//     let NdotL = max(dot(N, L), 0.0);
-//     if (NdotL <= 0.0) { return vec3<f32>(0.0); }
-
-//     // Your original, clean stylized color blending
-//     let specColor = mix(vec3<f32>(1.0), albedo, smoothness);
-    
-//     // Stable Blinn-Phong highlight (Zero noise, fast convergence)
-//     let H = normalize(V + L);
-//     let NdotH = max(dot(N, H), 0.0);
-//     let specPower = exp2(10.0 * smoothness + 1.0);
-//     let specIntensity = pow(NdotH, specPower) * smoothness;
-
-//     let diffuse = albedo * (1.0 - smoothness);
-//     let specular = specColor * specIntensity;
-
-//     return (diffuse + specular) * L_i * NdotL;
-// }
-
-            
 
             @group(0) @binding(0) var<uniform> cam: Camera;
             @group(0) @binding(1) var<storage, read> spheres: array<Sphere>;
@@ -252,9 +140,20 @@
                         rec.normal = normalize(rec.point - s.posRad.xyz);
                         if (dot(rec.normal, ray.dir) > 0.0) { rec.normal = -rec.normal; }
 
-                        rec.mat.color = s.mat0.rgb; rec.mat.smoothness = s.mat0.a;
-                        rec.mat.emColor = s.mat1.rgb; rec.mat.emStrength = s.mat1.a;
-                        rec.mat.trans = s.mat2.x; rec.mat.ior = max(1.0, s.mat2.y); rec.mat.metallic = s.mat2.z;
+                        // Buffer layout:
+                        // mat0: color.rgb + roughness
+                        // mat1: emColor.rgb + emStrength
+                        // mat2: transmission, ior, metallic, specular
+                        // prevPosRad.w: opacity
+                        rec.mat.color        = s.mat0.rgb;
+                        rec.mat.roughness    = s.mat0.a;
+                        rec.mat.emColor      = s.mat1.rgb;
+                        rec.mat.emStrength   = s.mat1.a;
+                        rec.mat.transmission = s.mat2.x;
+                        rec.mat.ior          = max(1.0, s.mat2.y);
+                        rec.mat.metallic     = s.mat2.z;
+                        rec.mat.specular     = s.mat2.w;
+                        rec.mat.opacity      = s.prevPosRad.w;
                         return rec;
                     }
                 }
@@ -299,11 +198,12 @@
                     let s = spheres[i];
                     if (s.posRad.w <= 0.0002) { continue; } 
 
-                    // let opacity = s.mat2.w;
-                    // if (opacity < 1.0) {
-                    //     if (!rt_enabled_bool && opacity < 0.5) { continue; } // Preview mode dithering
-                    //     if (rt_enabled_bool && rand_float(rngState) > opacity) { continue; } // RT mode true fade
-                    // }
+                    // Stochastic opacity at intersection level
+                    let sph_opacity = s.prevPosRad.w;
+                    if (sph_opacity < 1.0) {
+                        if (!rt_enabled_bool && sph_opacity < 0.5) { continue; }
+                        if (rt_enabled_bool && rand_float(rngState) > sph_opacity) { continue; }
+                    }
 
                     let rec = intersectSphere(ray, s);
                     if (rec.hit && rec.dist < closest.dist) { closest = rec; closest.objId = i; closest.isSphere = 1u; }
@@ -320,9 +220,11 @@
                     localRay.invDir = 1.0 / localRay.dir;
 
                     let mat2_z = mesh.mat2.z;
-let vectorType = i32(mat2_z % 10.0);
-let isVector = vectorType > 0;
-let isSmooth = mat2_z >= 10.0;
+                    // Bitfield decode: vectorType in bits 0-3, isSmooth in bit 4
+                    let flags_u = bitcast<u32>(mat2_z);
+                    let vectorType = i32(flags_u & 0xFu);
+                    let isVector   = vectorType > 0;
+                    let isSmooth   = (flags_u >> 4u) & 1u;
 
                     var stack: array<u32, 64>; var stackPtr = 0u;
                     stack[stackPtr] = u32(mesh.triData.x); stackPtr++;
@@ -344,14 +246,15 @@ let isSmooth = mat2_z >= 10.0;
                                     var isValidHit = true;
                                     var texColor = vec4<f32>(1.0);
                                     
-                                    // let meshOpacity = mesh.aabbMin.w;
-                                    // if (meshOpacity < 1.0) {
-                                    //     if (!rt_enabled_bool) {
-                                    //         if (meshOpacity < 0.5) { isValidHit = false; }
-                                    //     } else {
-                                    //         if (rand_float(rngState) > meshOpacity) { isValidHit = false; }
-                                    //     }
-                                    // }
+                                    // Stochastic material opacity at intersection level
+                                    let meshOpacity = mesh.aabbMin.w;
+                                    if (meshOpacity < 1.0) {
+                                        if (!rt_enabled_bool) {
+                                            if (meshOpacity < 0.5) { isValidHit = false; }
+                                        } else {
+                                            if (rand_float(rngState) > meshOpacity) { isValidHit = false; }
+                                        }
+                                    }
 
                                     if (isVector) {
                                         let w = 1.0 - res.y - res.z;
@@ -418,13 +321,16 @@ let isSmooth = mat2_z >= 10.0;
                                             texColor = vec4<f32>(pow(texColor.rgb, vec3<f32>(2.2)), texColor.a); 
                                         }
 
-                                        closest.mat.color = mesh.mat0.rgb * texColor.rgb;
-                                        closest.mat.smoothness = mesh.mat0.a;
-                                        closest.mat.emColor = mesh.mat1.rgb * texColor.rgb;
-                                        closest.mat.emStrength = mesh.mat1.a;
-                                        closest.mat.trans = mesh.mat2.x; 
-closest.mat.ior = max(1.0, mesh.mat2.y);
-closest.mat.metallic = mesh.mat2.w; // <- NEW
+                                        closest.mat.color        = mesh.mat0.rgb * texColor.rgb;
+                                        closest.mat.roughness    = mesh.mat0.a;
+                                        closest.mat.emColor      = mesh.mat1.rgb * texColor.rgb;
+                                        closest.mat.emStrength   = mesh.mat1.a;
+                                        closest.mat.transmission = mesh.mat2.x;
+                                        closest.mat.ior          = max(1.0, mesh.mat2.y);
+                                        // mat2.z = packed flags (already decoded above)
+                                        closest.mat.metallic     = mesh.mat2.w;
+                                        closest.mat.specular     = mesh.aabbMax.w; // free slot
+                                        closest.mat.opacity      = mesh.aabbMin.w;
 
 
                                         let edge1 = tri.v1.xyz - tri.v0.xyz; 
@@ -433,7 +339,7 @@ closest.mat.metallic = mesh.mat2.w; // <- NEW
                                         var worldGeomNormal = normalize((vec4<f32>(localGeomNormal, 0.0) * mesh.invModelMatrix).xyz);
 
                                         var localNormal: vec3<f32>;
-                                        if (isSmooth) { localNormal = normalize(tri.n0.xyz * w + tri.n1.xyz * res.y + tri.n2.xyz * res.z); } 
+                                        if (isSmooth != 0u) { localNormal = normalize(tri.n0.xyz * w + tri.n1.xyz * res.y + tri.n2.xyz * res.z); } 
                                         else { localNormal = localGeomNormal; }
                                         
                                         var finalNormal = normalize((vec4<f32>(localNormal, 0.0) * mesh.invModelMatrix).xyz);
@@ -610,8 +516,12 @@ fn evaluateFallbackShading(
     let skyWeight = 0.5 * (N.y + 1.0);
     let ambient = mix(vec3<f32>(0.08), skyColor, skyWeight);
     
-    let H1 = normalize(L1 + V); let spec1 = pow(max(dot(N, H1), 0.0), max(128.0 * gb_n.w, 4.0)) * gb_n.w * 2.0 * shadowVis;
-    let H2 = normalize(L2 + V); let spec2 = pow(max(dot(N, H2), 0.0), max(32.0 * gb_n.w, 2.0)) * gb_n.w * 0.4;
+    // gb_n.w now stores roughness (0=mirror, 1=rough); convert for Blinn-Phong preview
+    let roughness  = clamp(gb_n.w, 0.0, 1.0);
+    let smoothness = 1.0 - roughness;
+
+    let H1 = normalize(L1 + V); let spec1 = pow(max(dot(N, H1), 0.0), max(128.0 * smoothness, 4.0)) * smoothness * 2.0 * shadowVis;
+    let H2 = normalize(L2 + V); let spec2 = pow(max(dot(N, H2), 0.0), max(32.0 * smoothness, 2.0)) * smoothness * 0.4;
     
     let NdotV = max(dot(N, V), 0.0);
     let fresnel = pow(1.0 - NdotV, 5.0);
@@ -622,11 +532,12 @@ fn evaluateFallbackShading(
     let skyReflection = getSkyColor(Ray(gb_p.xyz, safeR, 1.0 / safeR));
     
     let specColorBase = mix(vec3<f32>(1.0), gb_a.rgb, metallic);
-    var specularColor = specColorBase * (spec1 + spec2) + skyReflection * gb_n.w * mix(0.15, 1.0, fresnel);
+    var specularColor = specColorBase * (spec1 + spec2) + skyReflection * smoothness * mix(0.15, 1.0, fresnel);
     
     var matColor = diffuseColor + specularColor;
     
-    matColor += gb_a.rgb * max(0.0, gb_a.a);
+    // gb_a.a: 1.0=emissive, 0.0=diffuse, -1.0=sky (clamp prevents emissive over-brightening in preview)
+    matColor += gb_a.rgb * clamp(gb_a.a, 0.0, 1.0);
     
     if (gb_p.w > 0.0) {
         let safeV = V + vec3<f32>(0.001);

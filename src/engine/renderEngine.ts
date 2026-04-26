@@ -565,14 +565,21 @@ export class RenderEngine {
         if (spheres.length > 0) {
             let sData = this.sphereArena.f32;
             spheres.forEach((obj, i) => {
-                let wMat = obj.get_world_matrix(); if (!obj.prevPos) obj.prevPos = [wMat[12], wMat[13], wMat[14]];
-                let offset = i * 20;
+                const mat = obj.material;
+                let wMat = obj.get_world_matrix();
+                if (!obj.prevPos) obj.prevPos = [wMat[12], wMat[13], wMat[14]];
+                const offset = i * 20;
+                // posRad
                 sData.set([wMat[12], wMat[13], wMat[14], obj.radius * obj.scale[0]], offset);
-                sData.set([obj.prevPos[0], obj.prevPos[1], obj.prevPos[2], 0], offset + 4);
-                sData.set([obj.color[0], obj.color[1], obj.color[2], obj.smoothness], offset + 8);
-                sData.set([obj.emColor[0], obj.emColor[1], obj.emColor[2], obj.emStrength], offset + 12);
-                let finalMetallic = useLegacyMetal ? Math.max(0.0, (obj.smoothness - 0.5) * 2.0) : obj.metallic;
-                sData.set([obj.transparency, obj.ior, finalMetallic, obj.opacity], offset + 16);
+                // prevPosRad — w stores opacity (stochastic alpha)
+                sData.set([obj.prevPos[0], obj.prevPos[1], obj.prevPos[2], mat.opacity], offset + 4);
+                // mat0: color.rgb + roughness
+                sData.set([mat.color[0], mat.color[1], mat.color[2], mat.roughness], offset + 8);
+                // mat1: emColor.rgb + emStrength
+                sData.set([mat.emColor[0], mat.emColor[1], mat.emColor[2], mat.emStrength], offset + 12);
+                // mat2: transmission, ior, metallic, specular
+                const finalMetallic = useLegacyMetal ? Math.max(0.0, (mat.smoothness - 0.5) * 2.0) : mat.metallic;
+                sData.set([mat.transmission, mat.ior, finalMetallic, mat.specular], offset + 16);
                 obj.prevPos = [wMat[12], wMat[13], wMat[14]];
             });
             this.sphereArena.upload(this.device.queue, spheres.length);
@@ -581,25 +588,39 @@ export class RenderEngine {
         if (meshes.length > 0) {
             let mData = this.meshArena.f32;
             meshes.forEach((obj, i) => {
+                const mat = obj.material;
                 let wMat = obj.get_world_matrix();
-                if (!obj.invMat) obj.invMat = Math3D.mat4(); if (!obj.prevMat) obj.prevMat = new Float32Array(wMat);
+                if (!obj.invMat) obj.invMat = Math3D.mat4();
+                if (!obj.prevMat) obj.prevMat = new Float32Array(wMat);
                 Math3D.mat4Invert(obj.invMat, wMat);
 
-                let offset = i * 72;
-                mData.set(obj.invMat, offset); mData.set(wMat, offset + 16); mData.set(obj.prevMat, offset + 32);
+                const offset = i * 72;
+                mData.set(obj.invMat, offset);
+                mData.set(wMat,       offset + 16);
+                mData.set(obj.prevMat,offset + 32);
 
-                let aabb = obj.localAABB || [0, 0, 0, 0, 0, 0];
-                let worldAABB = computeWorldAABB([aabb[0], aabb[1], aabb[2]], [aabb[3], aabb[4], aabb[5]], wMat);
+                const aabb = obj.localAABB || [0, 0, 0, 0, 0, 0];
+                const worldAABB = computeWorldAABB([aabb[0], aabb[1], aabb[2]], [aabb[3], aabb[4], aabb[5]], wMat);
 
-                mData.set([worldAABB.min[0] - 0.01, worldAABB.min[1] - 0.01, worldAABB.min[2] - 0.01, obj.opacity], offset + 48);
+                // aabbMin.w = opacity (stochastic alpha — now actually used!)
+                mData.set([worldAABB.min[0] - 0.01, worldAABB.min[1] - 0.01, worldAABB.min[2] - 0.01, mat.opacity], offset + 48);
                 mData.set([worldAABB.max[0] + 0.01, worldAABB.max[1] + 0.01, worldAABB.max[2] + 0.01, 0], offset + 52);
-                mData.set([obj.color[0], obj.color[1], obj.color[2], obj.smoothness], offset + 56);
-                mData.set([obj.emColor[0], obj.emColor[1], obj.emColor[2], obj.emStrength], offset + 60);
+                // mat0: color.rgb + roughness
+                mData.set([mat.color[0], mat.color[1], mat.color[2], mat.roughness], offset + 56);
+                // mat1: emColor.rgb + emStrength
+                mData.set([mat.emColor[0], mat.emColor[1], mat.emColor[2], mat.emStrength], offset + 60);
 
-                let finalMeshMetallic = useLegacyMetal ? Math.max(0.0, (obj.smoothness - 0.5) * 2.0) : obj.metallic;
-                let vecType = 0.0; if (obj.isVector) vecType = 1.0; else if (obj.isMSDF) vecType = 2.0; else if (obj.isImplicit) vecType = 3.0;
-                let packedZ = vecType + (obj.isSmooth ? 10.0 : 0.0);
-                mData.set([obj.transparency, obj.ior, packedZ, finalMeshMetallic], offset + 64);
+                // mat2: transmission, ior, packedFlags (bitfield), metallic
+                // mat2.z packs vectorType (bits 0-3) + isSmooth (bit 4) as a uint reinterpreted as float
+                const finalMeshMetallic = useLegacyMetal ? Math.max(0.0, (mat.smoothness - 0.5) * 2.0) : mat.metallic;
+                let vecType = 0; if (obj.isVector) vecType = 1; else if (obj.isMSDF) vecType = 2; else if (obj.isImplicit) vecType = 3;
+                const flagsUint = (vecType & 0xF) | ((obj.isSmooth ? 1 : 0) << 4);
+                const packedFlags = new Float32Array(new Uint32Array([flagsUint]).buffer)[0];
+                mData.set([mat.transmission, mat.ior, packedFlags, finalMeshMetallic], offset + 64);
+                // triData: bvhRootOffset, triCount, albedoTexIdx, normalTexIdx
+                // mat2.w is now metallic — specular stored separately (see below)
+                // NOTE: specular could go in aabbMax.w (currently 0) if needed later
+                mData[offset + 55] = mat.specular; // aabbMax.w — free slot for specular
                 mData.set([obj.bvhRootOffset, obj.triangles.length, obj.albedoTexIdx ?? -1.0, obj.normalTexIdx ?? -1.0], offset + 68);
                 obj.prevMat = new Float32Array(wMat);
             });

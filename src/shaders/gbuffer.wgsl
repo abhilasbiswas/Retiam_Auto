@@ -31,8 +31,8 @@
     let hit = worldHit(ray, &rngState);
 
     if (hit.hit) {
-        out.pos = vec4<f32>(hit.point, hit.mat.trans);
-        out.normal = vec4<f32>(hit.normal, hit.mat.smoothness);
+        out.pos = vec4<f32>(hit.point, hit.mat.transmission);
+        out.normal = vec4<f32>(hit.normal, hit.mat.roughness);
         
         if (hit.mat.emStrength > 0.0) {
             out.albedo = vec4<f32>(hit.mat.emColor * hit.mat.emStrength, 1.0);

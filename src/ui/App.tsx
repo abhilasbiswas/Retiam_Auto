@@ -45,6 +45,7 @@ export default function App() {
     const [frames] = useState("Realtime Samples: 0");
     const [mobjects, setMobjects] = useState<any[]>([]);
     const [selectedObject, setSelectedObject] = useState<any>(null);
+    const [isLegacyMetal, setIsLegacyMetal] = useState(true);
     const [, setTickCounter] = useState(0);
 
     useEffect(() => {
@@ -354,10 +355,52 @@ export default function App() {
                                                     <input type="number" step="0.05" min="0" max="1" value={selectedObject.material.color[1]} onChange={e => updateObjectProp('matColor.1', parseFloat(e.target.value))} style={{ ...coordInputStyle, borderTop: '2px solid #22c55e' }} />
                                                     <input type="number" step="0.05" min="0" max="1" value={selectedObject.material.color[2]} onChange={e => updateObjectProp('matColor.2', parseFloat(e.target.value))} style={{ ...coordInputStyle, borderTop: '2px solid #3b82f6' }} />
                                                 </div></div>
-                                                <div style={rowStyle}><span>Smoothness:</span><input type="range" min="0" max="1" step="0.01" value={selectedObject.material.smoothness} onChange={e => updateObjectProp('mat.smoothness', parseFloat(e.target.value))} /></div>
-                                                <div style={rowStyle}><span>Metallic:</span><input type="range" min="0" max="1" step="0.01" value={selectedObject.material.metallic} onChange={e => updateObjectProp('mat.metallic', parseFloat(e.target.value))} /></div>
-                                                <div style={rowStyle}><span>Transparency:</span><input type="range" min="0" max="1" step="0.01" value={selectedObject.material.transparency} onChange={e => updateObjectProp('mat.transparency', parseFloat(e.target.value))} /></div>
-                                                <div style={rowStyle}><span>IOR:</span><input type="number" step="0.05" style={{ ...inputStyle, width: '60px' }} value={selectedObject.material.ior} onChange={e => updateObjectProp('mat.ior', parseFloat(e.target.value))} /></div>
+                                                {/* MATERIAL PROPERTIES */}
+                                                <div style={rowStyle}>
+                                                    <span>Roughness:</span>
+                                                    <input type="range" min="0" max="1" step="0.01"
+                                                        value={selectedObject.material.roughness}
+                                                        onChange={e => updateObjectProp('mat.roughness', parseFloat(e.target.value))} />
+                                                    <span style={valStyle}>{selectedObject.material.roughness?.toFixed(2)}</span>
+                                                </div>
+                                                <div style={rowStyle}>
+                                                    <span>Metallic:</span>
+                                                    <input type="range" min="0" max="1" step="0.01"
+                                                        value={isLegacyMetal ? Math.max(0.0, ((1.0 - selectedObject.material.roughness) - 0.5) * 2.0) : selectedObject.material.metallic}
+                                                        onChange={e => { if (!isLegacyMetal) updateObjectProp('mat.metallic', parseFloat(e.target.value)) }} 
+                                                        disabled={isLegacyMetal}
+                                                        style={isLegacyMetal ? { opacity: 0.5, cursor: 'not-allowed' } : {}} />
+                                                    <span style={valStyle}>{isLegacyMetal ? "Auto" : selectedObject.material.metallic?.toFixed(2)}</span>
+                                                </div>
+                                                <div style={rowStyle}>
+                                                    <span>Specular:</span>
+                                                    <input type="range" min="0" max="1" step="0.01"
+                                                        value={selectedObject.material.specular}
+                                                        onChange={e => updateObjectProp('mat.specular', parseFloat(e.target.value))} />
+                                                    <span style={valStyle}>{selectedObject.material.specular?.toFixed(2)}</span>
+                                                </div>
+                                                <div style={{ height: '1px', background: '#222', margin: '6px 0' }} />
+                                                <div style={rowStyle}>
+                                                    <span>Transmission:</span>
+                                                    <input type="range" min="0" max="1" step="0.01"
+                                                        value={selectedObject.material.transmission}
+                                                        onChange={e => updateObjectProp('mat.transmission', parseFloat(e.target.value))} />
+                                                    <span style={valStyle}>{selectedObject.material.transmission?.toFixed(2)}</span>
+                                                </div>
+                                                <div style={rowStyle}>
+                                                    <span>IOR:</span>
+                                                    <input type="number" step="0.05" min="1" max="3"
+                                                        style={{ ...inputStyle, width: '60px' }}
+                                                        value={selectedObject.material.ior}
+                                                        onChange={e => updateObjectProp('mat.ior', parseFloat(e.target.value))} />
+                                                </div>
+                                                <div style={rowStyle}>
+                                                    <span>Opacity:</span>
+                                                    <input type="range" min="0" max="1" step="0.01"
+                                                        value={selectedObject.material.opacity}
+                                                        onChange={e => updateObjectProp('mat.opacity', parseFloat(e.target.value))} />
+                                                    <span style={valStyle}>{selectedObject.material.opacity?.toFixed(2)}</span>
+                                                </div>
                                             </>
                                         )}
                                     </div>
@@ -376,7 +419,10 @@ export default function App() {
                                 <button id="btnToggleDoF" style={{ ...fullBtnStyle, marginTop: '8px' }}>Disable Focus Blur (B)</button>
                                 <div style={{ ...rowStyle, marginTop: '12px', borderTop: '1px solid #222', paddingTop: '10px' }}>
                                     <span>Legacy Materials (Auto-Metal):</span>
-                                    <input type="checkbox" id="chkLegacyMetal" defaultChecked={true} onChange={() => { if (sceneRef.current) (sceneRef.current as any).frameCount = 0; }} />
+                                    <input type="checkbox" id="chkLegacyMetal" checked={isLegacyMetal} onChange={(e) => { 
+                                        setIsLegacyMetal(e.target.checked); 
+                                        if (sceneRef.current) (sceneRef.current as any).frameCount = 0; 
+                                    }} />
                                 </div>
 
                                 <div style={{ height: '1px', background: '#222', margin: '16px 0' }} />

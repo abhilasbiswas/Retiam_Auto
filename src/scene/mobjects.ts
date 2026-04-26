@@ -6,52 +6,73 @@ import { buildMeshBVH } from "../geometry/bvhBuilder";
 
 export class Material {
     constructor(config = {}) {
-        this.color = config.color || [1, 1, 1];
-        this.smoothness = config.smoothness !== undefined ? config.smoothness : 0.0;
-        this.transparency = config.transparency !== undefined ? config.transparency : 0.0;
-        this.ior = config.ior !== undefined ? config.ior : 1.5;
-        this.emColor = config.emColor || [0, 0, 0];
+        this.color      = config.color || [1, 1, 1];
+        this.emColor    = config.emColor || [0, 0, 0];
         this.emStrength = config.emStrength !== undefined ? config.emStrength : 0.0;
-        this.metallic = config.metallic !== undefined ? config.metallic : 0.0;
+        this.ior        = config.ior        !== undefined ? config.ior        : 1.5;
+        this.metallic   = config.metallic   !== undefined ? config.metallic   : 0.0;
+        this.opacity    = config.opacity    !== undefined ? config.opacity    : 1.0;
+
+        // PBR properties — roughness is primary, smoothness is alias (1 - roughness)
+        if (config.roughness !== undefined) {
+            this.roughness = config.roughness;
+        } else if (config.smoothness !== undefined) {
+            this.roughness = 1.0 - config.smoothness; // backward compat
+        } else {
+            this.roughness = 1.0;
+        }
+
+        // Transmission — transmission is primary, transparency is alias
+        if (config.transmission !== undefined) {
+            this.transmission = config.transmission;
+        } else if (config.transparency !== undefined) {
+            this.transmission = config.transparency; // backward compat
+        } else {
+            this.transmission = 0.0;
+        }
+
+        // Specular F0 level for dielectrics (0.5 = physical default = 4% reflectance)
+        this.specular = config.specular !== undefined ? config.specular : 0.5;
     }
+
+    // Backward-compatible aliases
+    get smoothness()   { return 1.0 - this.roughness; }
+    set smoothness(v)  { this.roughness = 1.0 - v; }
+    get transparency() { return this.transmission; }
+    set transparency(v){ this.transmission = v; }
 
     clone() {
         return new Material({
-            color: [...this.color],
-            smoothness: this.smoothness,
-            transparency: this.transparency,
-            ior: this.ior,
-            emColor: [...this.emColor],
-            emStrength: this.emStrength,
-            metallic: this.metallic
+            color:        [...this.color],
+            roughness:    this.roughness,
+            transmission: this.transmission,
+            ior:          this.ior,
+            emColor:      [...this.emColor],
+            emStrength:   this.emStrength,
+            metallic:     this.metallic,
+            specular:     this.specular,
+            opacity:      this.opacity,
         });
     }
 
-    // --- HELPER PRESETS ---
-
+    // --- NAMED PRESETS ---
     static Matte(color = [1, 1, 1]) {
-        return new Material({ color, smoothness: 0.0 });
+        return new Material({ color, roughness: 1.0 });
     }
-
-    static Glossy(color = [1, 1, 1], smoothness = 0.8) {
-        return new Material({ color, smoothness });
+    static Glossy(color = [1, 1, 1], roughness = 0.2) {
+        return new Material({ color, roughness });
     }
-
-    static Metal(color = [1, 1, 1], smoothness = 0.9) {
-        return new Material({ color, smoothness, metallic: 1.0 });
+    static Metal(color = [1, 1, 1], roughness = 0.1) {
+        return new Material({ color, roughness, metallic: 1.0 });
     }
-
-    static Glass(color = [1, 1, 1], ior = 1.5) {
-        return new Material({ color, smoothness: 1.0, transparency: 1.0, ior });
+    static Glass(ior = 1.5) {
+        return new Material({ roughness: 0.0, transmission: 1.0, ior });
     }
-
     static Emissive(color = [1, 1, 1], strength = 5.0) {
         return new Material({ color: [0, 0, 0], emColor: color, emStrength: strength });
     }
-
-    // This forces IOR to 1.0, which disables refraction so light travels perfectly straight!
-    static TransparentNoRefraction(color = [0.4, 0.7, 1.0], transparency = 0.8) {
-        return new Material({ color, smoothness: 1.0, transparency: transparency, ior: 1.0, metallic: 0.0, });
+    static TransparentNoRefraction(color = [0.4, 0.7, 1.0], transmission = 0.8) {
+        return new Material({ color, roughness: 0.0, transmission, ior: 1.0 });
     }
 }
 export class Mobject {
@@ -63,7 +84,6 @@ export class Mobject {
         // Use the new Material Class
         this.material = new Material();
 
-        this.opacity = 1.0;
         this.value = 0.0;
         this.updaters = [];
         this.parent = null;
@@ -72,35 +92,43 @@ export class Mobject {
         this.name = '';
     }
 
-    // Proxies to keep Engine updates and Animation Timelines working seamlessly
-    get color() { return this.material.color; }
-    set color(v) { this.material.color = v; }
-    get smoothness() { return this.material.smoothness; }
-    set smoothness(v) { this.material.smoothness = v; }
-    get transparency() { return this.material.transparency; }
-    set transparency(v) { this.material.transparency = v; }
-    get ior() { return this.material.ior; }
-    set ior(v) { this.material.ior = v; }
-    get emColor() { return this.material.emColor; }
-    set emColor(v) { this.material.emColor = v; }
-    get emStrength() { return this.material.emStrength; }
-    set emStrength(v) { this.material.emStrength = v; }
-    get metallic() { return this.material.metallic; }
-    set metallic(v) { this.material.metallic = v; }
+    // Proxies to material — keeps animation timelines and engine updates working
+    get color()        { return this.material.color; }
+    set color(v)       { this.material.color = v; }
+    get roughness()    { return this.material.roughness; }
+    set roughness(v)   { this.material.roughness = v; }
+    get smoothness()   { return this.material.smoothness; }   // alias
+    set smoothness(v)  { this.material.smoothness = v; }      // alias
+    get transmission() { return this.material.transmission; }
+    set transmission(v){ this.material.transmission = v; }
+    get transparency() { return this.material.transmission; } // alias
+    set transparency(v){ this.material.transmission = v; }    // alias
+    get ior()          { return this.material.ior; }
+    set ior(v)         { this.material.ior = v; }
+    get emColor()      { return this.material.emColor; }
+    set emColor(v)     { this.material.emColor = v; }
+    get emStrength()   { return this.material.emStrength; }
+    set emStrength(v)  { this.material.emStrength = v; }
+    get metallic()     { return this.material.metallic; }
+    set metallic(v)    { this.material.metallic = v; }
+    get specular()     { return this.material.specular; }
+    set specular(v)    { this.material.specular = v; }
+    get opacity()      { return this.material.opacity; }
+    set opacity(v)     { this.material.opacity = v; }
 
+    // set_material: accepts Material instance or legacy positional args
     set_material(matOrColor, smoothness, trans, ior, emColor, emStrength, metallic) {
         if (matOrColor instanceof Material) {
             this.material = matOrColor.clone();
         } else if (Array.isArray(matOrColor)) {
-            // Backward compatibility for legacy arrays
             this.material = new Material({
-                color: matOrColor,
+                color:      matOrColor,
                 smoothness: smoothness !== undefined ? smoothness : 0.0,
-                transparency: trans !== undefined ? trans : 0.0,
-                ior: ior !== undefined ? ior : 1.5,
-                emColor: emColor || [0, 0, 0],
+                transparency: trans    !== undefined ? trans      : 0.0,
+                ior:        ior        !== undefined ? ior        : 1.5,
+                emColor:    emColor    || [0, 0, 0],
                 emStrength: emStrength !== undefined ? emStrength : 0.0,
-                metallic: metallic !== undefined ? metallic : 0.0
+                metallic:   metallic   !== undefined ? metallic   : 0.0,
             });
         }
         return this;

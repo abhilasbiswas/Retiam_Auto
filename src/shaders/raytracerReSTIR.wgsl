@@ -8,56 +8,18 @@
                 @group(1) @binding(6) var<storage, read> resPrev: array<Reservoir>;
 
                 fn trace_bounces(initial_ray: Ray, rngState: ptr<function, u32>) -> vec3<f32> {
-    var ray = initial_ray; 
-    var rayColor = vec3<f32>(1.0); 
-    var incomingLight = vec3<f32>(0.0);
+    var ray        = initial_ray;
+    var throughput = vec3<f32>(1.0);
+    var L          = vec3<f32>(0.0);
     let max_bounces = i32(cam.dof.z);
 
     for (var bounce = 0; bounce < max_bounces; bounce++) {
         let hit = worldHit(ray, rngState);
-        if (!hit.hit) { 
-            incomingLight += rayColor * getSkyColor(ray); 
-            break; 
-        }
-
-        incomingLight += rayColor * (hit.mat.emColor * hit.mat.emStrength);
-
-        let isInside = dot(ray.dir, hit.normal) > 0.0;
-        var outwardNormal = hit.normal; 
-        var eta = 1.0 / hit.mat.ior;
-        if (isInside) { outwardNormal = -hit.normal; eta = hit.mat.ior; }
-
-        if (rand_float(rngState) < hit.mat.trans) {
-            let cos_theta = min(dot(-ray.dir, outwardNormal), 1.0);
-            let sin_theta = sqrt(max(0.0, 1.0 - cos_theta * cos_theta));
-            if (eta * sin_theta > 1.0 || rand_float(rngState) < 0.1) {
-                ray.dir = normalize(reflect(ray.dir, outwardNormal) + rand_unit_vector(rngState) * (1.0 - hit.mat.smoothness));
-            } else {
-                ray.dir = normalize(refract(normalize(ray.dir), outwardNormal, eta) + rand_unit_vector(rngState) * (1.0 - hit.mat.smoothness));
-                rayColor *= hit.mat.color;
-            }
-            ray.origin = hit.point + ray.dir * 0.002;
-            ray.invDir = 1.0 / ray.dir;
-            continue;
-        }
-
-        // Clean, stylized bounce
-        if (rand_float(rngState) < hit.mat.smoothness) {
-            let fuzz = 1.0 - hit.mat.smoothness;
-            let specularDir = reflect(ray.dir, outwardNormal);
-            ray.dir = normalize(specularDir + rand_unit_vector(rngState) * fuzz);
-            rayColor *= mix(vec3<f32>(1.0), hit.mat.color, hit.mat.metallic);
-        } else {
-            ray.dir = normalize(outwardNormal + rand_unit_vector(rngState));
-            rayColor *= hit.mat.color;
-        }
-
-        ray.origin = hit.point + outwardNormal * 0.001;
-        ray.invDir = 1.0 / ray.dir;
-
-        if (max(rayColor.r, max(rayColor.g, rayColor.b)) < 0.01) { break; }
+        if (!hit.hit) { L += throughput * getSkyColor(ray); break; }
+        L += throughput * (hit.mat.emColor * hit.mat.emStrength);
+        if (!bsdf_scatter(&ray, hit, rngState, &throughput)) { break; }
     }
-    return incomingLight;
+    return L;
 }
 
                 @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4<f32> {
@@ -106,11 +68,23 @@
     if (gb_a.a < -0.5) { 
         totalColor = getSkyColor(cameraRay);
     } else {
-        let hitPoint = gb_p.xyz;
-        let hitNormal = gb_n.xyz;
-        let smoothness = gb_n.w;
-        let albedo = gb_a.rgb;
-        let trans = gb_p.w; 
+        let hitPoint  = gb_p.xyz;
+        let hitNormal = normalize(gb_n.xyz);
+        let roughness = gb_n.w;         // was smoothness
+        let albedo    = gb_a.rgb;
+        let trans     = gb_p.w;
+
+        // Build a minimal Material from G-Buffer data for eval_bsdf()
+        var gbMat: Material;
+        gbMat.color        = albedo;
+        gbMat.roughness    = roughness;
+        gbMat.metallic     = metallic;
+        gbMat.specular     = 0.5;       // physical default
+        gbMat.emColor      = vec3<f32>(0.0);
+        gbMat.emStrength   = 0.0;
+        gbMat.transmission = 0.0;
+        gbMat.ior          = 1.5;
+        gbMat.opacity      = 1.0;
 
         if (gb_a.a > 0.0) { totalColor += albedo; }
 
@@ -121,13 +95,21 @@
             var bounceRay = Ray(hitPoint + hitNormal * 0.002, vec3(0.0), vec3(0.0));
             var pdf = 1.0;
 
-            if (rand_float(&rngState) < smoothness) {
-                let fuzz = 1.0 - smoothness;
-                bounceRay.dir = normalize(reflect(dirToScreen, hitNormal) + rand_unit_vector(&rngState) * fuzz);
-                pdf = max(smoothness, 0.001); 
+            // F0 for G-buffer material — matches bsdf_scatter_opaque path selection
+            let F0_scalar = F0_from_ior(gbMat.ior, gbMat.specular);
+            let F0_vec    = mix(vec3<f32>(F0_scalar), gbMat.color, gbMat.metallic);
+            let F_view    = fresnel_schlick(max(dot(hitNormal, V), 0.0), F0_vec);
+            let p_spec    = clamp(dot(F_view, vec3<f32>(0.2126, 0.7152, 0.0722)), 0.01, 0.99);
+
+            if (rand_float(&rngState) < p_spec) {
+                // alpha = roughness^2 (matches brdf.wgsl convention)
+                let alpha = max(roughness * roughness, 0.001);
+                let H = sample_GGX_halfvector(hitNormal, alpha, &rngState);
+                bounceRay.dir = reflect(-V, H);
+                pdf = max(p_spec, 0.001);
             } else {
                 bounceRay.dir = normalize(hitNormal + rand_unit_vector(&rngState));
-                pdf = max(1.0 - smoothness, 0.001); 
+                pdf = max(1.0 - p_spec, 0.001);
             }
             bounceRay.invDir = 1.0 / bounceRay.dir;
 
@@ -136,11 +118,10 @@
                 incomingLight = trace_bounces(bounceRay, &rngState) * cam.giData.x;
             }
 
-            // PASS METALLIC TO EVAL_CONTRIBUTION
-            let contrib = eval_contribution(bounceRay.dir, incomingLight, hitNormal, albedo, smoothness, metallic, V);
-            let p_hat = dot(contrib, vec3<f32>(0.2126, 0.7152, 0.0722));
-            
-            let weight = p_hat / pdf; 
+            // eval_bsdf from brdf.wgsl — energy-correct BRDF evaluation for reservoir weighting
+            let contrib = eval_bsdf(bounceRay.dir, V, hitNormal, gbMat);
+            let p_hat   = dot(contrib, vec3<f32>(0.2126, 0.7152, 0.0722));
+            let weight  = p_hat / pdf;
             updateReservoir(&r, vec4<f32>(bounceRay.dir, 0.0), vec4<f32>(albedo, 0.0), incomingLight, weight, &rngState);
 
             if (frameCount > 0.0) {
@@ -149,12 +130,12 @@
                 if (prev_coord.x >= 0 && prev_coord.x < i32(cam.resFovFrame.x) && prev_coord.y >= 0 && prev_coord.y < i32(cam.resFovFrame.y)) {
                     var prev_r = resPrev[u32(prev_coord.y) * u32(cam.resFovFrame.x) + u32(prev_coord.x)];
                     prev_r.y_radiance.w = bitcast<f32>(min(bitcast<u32>(prev_r.y_radiance.w), 15u));
-                    let temp_contrib = eval_contribution(prev_r.y_point.xyz, prev_r.y_radiance.xyz, hitNormal, albedo, smoothness, metallic, V);
+                    let temp_contrib = eval_bsdf(prev_r.y_point.xyz, V, hitNormal, gbMat);
                     mergeReservoir(&r, prev_r, dot(temp_contrib, vec3<f32>(0.2126, 0.7152, 0.0722)), &rngState);
                 }
             }
 
-            // --- GHOSTING FIX: spatial reuse only allowed if frameCount > 0.0 ---
+            // Spatial reuse — eval_bsdf for neighbor contribution
             if (frameCount > 0.0) {
                 for (var i = 0; i < i32(samples); i++) { 
                     let neighbor_coord = coord + vec2<i32>(rand_in_unit_disk(&rngState) * 12.0);
@@ -165,14 +146,14 @@
                         
                         if (dot(n_n, hitNormal) > 0.9 && distance(n_p, hitPoint) < 0.2) {
                             n_r.y_radiance.w = bitcast<f32>(min(bitcast<u32>(n_r.y_radiance.w), 4u)); 
-                            let spat_contrib = eval_contribution(n_r.y_point.xyz, n_r.y_radiance.xyz, hitNormal, albedo, smoothness, metallic, V);
+                            let spat_contrib = eval_bsdf(n_r.y_point.xyz, V, hitNormal, gbMat);
                             mergeReservoir(&r, n_r, dot(spat_contrib, vec3<f32>(0.2126, 0.7152, 0.0722)), &rngState);
                         }
                     }
                 }
             }
 
-            let final_contrib = eval_contribution(r.y_point.xyz, r.y_radiance.xyz, hitNormal, albedo, smoothness, metallic, V);
+            let final_contrib = eval_bsdf(r.y_point.xyz, V, hitNormal, gbMat);
             computeW(&r, dot(final_contrib, vec3<f32>(0.2126, 0.7152, 0.0722)));
             
             resCurr[pixel_idx] = r;

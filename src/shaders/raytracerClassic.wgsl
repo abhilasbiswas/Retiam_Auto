@@ -9,62 +9,33 @@
                 @group(1) @binding(6) var<storage, read> resPrev: array<Reservoir>;
 
                 fn trace_classic(initial_ray: Ray, rngState: ptr<function, u32>) -> vec3<f32> {
-    var ray = initial_ray; 
-    var rayColor = vec3<f32>(1.0); 
-    var incomingLight = vec3<f32>(0.0);
+    var ray        = initial_ray;
+    var throughput = vec3<f32>(1.0);
+    var L          = vec3<f32>(0.0);
     let max_bounces = i32(cam.dof.z);
 
     for (var bounce = 0; bounce < max_bounces; bounce++) {
         let hit = worldHit(ray, rngState);
         let gi_mult = select(cam.giData.x, 1.0, bounce == 0);
 
-        if (!hit.hit) { 
-            incomingLight += rayColor * getSkyColor(ray) * gi_mult; 
-            break; 
+        if (!hit.hit) {
+            L += throughput * getSkyColor(ray) * gi_mult;
+            break;
         }
 
-        incomingLight += rayColor * (hit.mat.emColor * hit.mat.emStrength) * gi_mult;
+        // Emission contribution
+        L += throughput * (hit.mat.emColor * hit.mat.emStrength) * gi_mult;
 
-        let isInside = dot(ray.dir, hit.normal) > 0.0;
-        var outwardNormal = hit.normal; 
-        var eta = 1.0 / hit.mat.ior;
-        if (isInside) { outwardNormal = -hit.normal; eta = hit.mat.ior; }
-
-        // Fast Transparency
-        if (rand_float(rngState) < hit.mat.trans) {
-            let cos_theta = min(dot(-ray.dir, outwardNormal), 1.0);
-            let sin_theta = sqrt(max(0.0, 1.0 - cos_theta * cos_theta));
-            if (eta * sin_theta > 1.0 || rand_float(rngState) < 0.1) { // Simple fake Fresnel
-                ray.dir = normalize(reflect(ray.dir, outwardNormal) + rand_unit_vector(rngState) * (1.0 - hit.mat.smoothness));
-            } else {
-                ray.dir = normalize(refract(normalize(ray.dir), outwardNormal, eta) + rand_unit_vector(rngState) * (1.0 - hit.mat.smoothness));
-                rayColor *= hit.mat.color;
-            }
-            ray.origin = hit.point + ray.dir * 0.002;
-            ray.invDir = 1.0 / ray.dir;
-            continue;
-        }
-
-        // Fast, Clean Opaque Scattering
-        if (rand_float(rngState) < hit.mat.smoothness) {
-            // Stylized Specular (The look you liked)
-            let fuzz = 1.0 - hit.mat.smoothness;
-            let specularDir = reflect(ray.dir, outwardNormal);
-            ray.dir = normalize(specularDir + rand_unit_vector(rngState) * fuzz);
-            rayColor *= mix(vec3<f32>(1.0), hit.mat.color, hit.mat.metallic);
-        } else {
-            // Clean Diffuse
-            ray.dir = normalize(outwardNormal + rand_unit_vector(rngState));
-            rayColor *= hit.mat.color;
-        }
-
-        ray.origin = hit.point + outwardNormal * 0.001;
-        ray.invDir = 1.0 / ray.dir;
-
-        if (max(rayColor.r, max(rayColor.g, rayColor.b)) < 0.01) { break; }
+        // bsdf_scatter() from brdf.wgsl handles:
+        //   - Stochastic opacity (cutout alpha)
+        //   - Transmission (glass) with correct Schlick Fresnel + Snell refraction
+        //   - Opaque: energy-conserving GGX specular + Lambertian diffuse
+        // Returns false if throughput drops below 0.001 (ray absorbed)
+        if (!bsdf_scatter(&ray, hit, rngState, &throughput)) { break; }
     }
-    return incomingLight;
+    return L;
 }
+
 
                 @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4<f32> {
                     var pos = array<vec2<f32>, 3>(vec2(-1.0, -1.0), vec2(3.0, -1.0), vec2(-1.0, 3.0));
@@ -86,7 +57,8 @@
         let gb_p = textureLoad(gbPos, coord, 0);
         let gb_n = textureLoad(gbNormal, coord, 0);
         let gb_a = textureLoad(gbAlbedo, coord, 0);
-        return evaluateFallbackShading(gb_p, gb_n, gb_a, cameraRay.origin, dirToScreen, 0.0, &rngState);
+        let gb_m_full = textureLoad(gbMotion, coord, 0);
+        return evaluateFallbackShading(gb_p, gb_n, gb_a, cameraRay.origin, dirToScreen, gb_m_full.z, &rngState);
     }
 
     var totalColor = vec3<f32>(0.0);

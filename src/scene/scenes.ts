@@ -1506,12 +1506,14 @@ export class VoxelRoomScene extends Scene {
             new Create(this.cube1, { run_time: 1.0 }),
             new Create(this.cube2, { run_time: 1.0 })
         );
-
         // --- STEP 5: BRING IN THE INTERACTIVE DESK LAMP ---
+
         await this.play(
             new Create(this.deskLamp, { run_time: 1.0 }),
+
         );
 
+        this.deskLamp.scale_by([1, 0.001, 1]);
         // --- STEP 6: FINAL INDICATE ---
         await this.play(new Indicate(this.cube2, { run_time: 1.5 }));
 

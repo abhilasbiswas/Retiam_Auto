@@ -176,7 +176,20 @@ export class Mobject {
     }
 
     shift(dx, dy, dz) { this.position[0] += dx; this.position[1] += dy; this.position[2] += dz; return this; }
-    scale_by(s) { this.scale[0] *= s; this.scale[1] *= s; this.scale[2] *= s; return this; }
+    
+    scale_by(s) {
+        if (typeof (s) == "number") {
+            this.scale[0] *= s;
+            this.scale[1] *= s;
+            this.scale[2] *= s;
+        }
+        else {
+            this.scale[0] *= s[0];
+            this.scale[1] *= s[1];
+            this.scale[2] *= s[2];
+        }
+        return this;
+    }
     rotate(x, y, z) { this.rotation[0] += x; this.rotation[1] += y; this.rotation[2] += z; return this; }
 
     copyState() {

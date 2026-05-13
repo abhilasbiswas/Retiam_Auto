@@ -289,6 +289,7 @@ fn compute_level(level: u32, gridPos: vec3<i32>, angID: vec2<i32>) {
 @group(1) @binding(2) var gbNormal: texture_2d<f32>;
 @group(1) @binding(3) var gbAlbedo: texture_2d<f32>;
 @group(1) @binding(4) var gbMotion: texture_2d<f32>;
+@group(1) @binding(5) var gbDepth: texture_2d<f32>;
 
 @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4<f32> {
     var pos = array<vec2<f32>, 3>(vec2(-1.0, -1.0), vec2(3.0, -1.0), vec2(-1.0, 3.0));

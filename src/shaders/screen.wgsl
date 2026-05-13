@@ -4,6 +4,8 @@
                 @group(0) @binding(1) var<uniform> postProc: PostProc;
                 @group(0) @binding(2) var oidnTex: texture_2d<f32>;
 
+                @group(0) @binding(3) var depthTex: texture_2d<f32>;
+
                 fn ACESFilm(x: vec3<f32>) -> vec3<f32> {
                     let a = 2.51; let b = 0.03; let c = 2.43; let d = 0.59; let e = 0.14;
                     return clamp((x * (a * x + b)) / (x * (c * x + d) + e), vec3<f32>(0.0), vec3<f32>(1.0));
@@ -38,6 +40,15 @@
                 
                 @fragment fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     let centerCoord = vec2<i32>(pos.xy);
+    
+    // Visualize Depth Map if mode is set
+    if (postProc.params.w > 0.5) {
+        let d = textureLoad(depthTex, centerCoord, 0).r;
+        // Normalize depth for visualization [0, 20] -> [1, 0] (white to black)
+        let normalizedDepth = clamp(1.0 - (d / 20.0), 0.0, 1.0);
+        return vec4<f32>(vec3<f32>(normalizedDepth), 1.0);
+    }
+
     var color = textureLoad(tex, centerCoord, 0).rgb; // The raw, noisy physical image
     
     let denoiseMode = postProc.params.x; 
@@ -69,7 +80,7 @@
             
             let invSigmaSpace2 = 1.0 / (2.0 * sigmaSpace * sigmaSpace);
             let invSigmaColor2 = 1.0 / (2.0 * sigmaColor * sigmaColor + 0.0001);
-
+ 
             let centerComp = color / (1.0 + color);
 
             for (var x = -radius; x <= radius; x++) {

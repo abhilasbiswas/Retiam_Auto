@@ -321,7 +321,6 @@ export class Scene {
 
             let exportData = null;
             if (useInteraction && this.interactionManager.tracks.length > 0) {
-                // We bundle the currently active tracks
                 exportData = {
                     version: 2,
                     tracks: this.interactionManager.tracks.map(t => ({
@@ -332,6 +331,10 @@ export class Scene {
                 };
             }
             this.startOfflineRender(fps, dur, spp, exportData);
+        });
+
+        document.getElementById('btnExportDepth').addEventListener('click', async () => {
+            await this.exportDepthMap();
         });
 
         // --- Interaction Recording UI ---
@@ -702,7 +705,8 @@ export class Scene {
 
         if (this.engine) {
             // Pass the numeric mode to the shader
-            this.engine.device.queue.writeBuffer(this.engine.postProcBuffer, 0, new Float32Array([previewDenoiserMode, this.frameCount, this.oidnReady ? 1.0 : 0.0, 0]));
+            const visualizeDepth = document.getElementById('chkVisualizeDepth')?.checked ? 1.0 : 0.0;
+            this.engine.device.queue.writeBuffer(this.engine.postProcBuffer, 0, new Float32Array([previewDenoiserMode, this.frameCount, this.oidnReady ? 1.0 : 0.0, visualizeDepth]));
 
             // Force the fast spatial denoise on while the timeline plays if an AI denoiser is selected to eliminate grain
             const activeDenoiser = (previewDenoiserMode === 1 || (isOidn && (isAnimating || this.isScrubbing()))) && this.cameraController.rtEnabled;
@@ -950,6 +954,31 @@ export class Scene {
         window.isRenderingVideo = false; document.getElementById('progressContainer').style.display = "none";
         this.frameCount = 0; this.oidnReady = false; this.lastTime = performance.now();
         requestAnimationFrame(async t => await this._loop(t));
+    }
+
+    async exportDepthMap() {
+        const originalStatus = document.getElementById('status').innerText;
+        document.getElementById('status').innerText = "Status: Exporting Depth Map...";
+        document.getElementById('status').style.color = "#3b82f6";
+
+        // Perform one high-quality pass to ensure G-Buffer is perfect
+        // We use isOffline = true to trigger the copy to readDepthBuffer
+        this.engine.update(this.mobjects, this.camera, 0, false, true, this.cameraController.useDoF, 1);
+        this.engine.render(0, true, this.mobjects);
+        
+        await this.engine.device.queue.onSubmittedWorkDone();
+        const data = await this.engine.getDepthData();
+
+        const blob = new Blob([data.buffer], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `depth_${this.engine.width}x${this.engine.height}.f32`;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        document.getElementById('status').innerText = originalStatus;
+        document.getElementById('status').style.color = "#9e9e9e";
     }
 }
 

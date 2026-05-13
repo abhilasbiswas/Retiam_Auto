@@ -449,6 +449,7 @@ export default function App() {
                                 <div style={rowStyle}><span>GI Multiplier:</span><input id="uiGIMultiplier" type="range" min="0" max="5" defaultValue="1.0" step="0.1" /><span id="giMultiplierVal" style={valStyle}>1.0</span></div>
                                 <div style={rowStyle}><span>Preview Samples:</span><input id="inpPreviewSpp" type="number" defaultValue="4" style={inputStyle} /></div>
                                 <div style={rowStyle}><span>Preview Bounces:</span><input id="inpBounces" type="number" defaultValue="5" style={inputStyle} /></div>
+                                <div style={rowStyle}><span>Visualize Depth:</span><input type="checkbox" id="chkVisualizeDepth" /></div>
 
                                 <div style={{ height: '1px', background: '#222', margin: '16px 0' }} />
                                 <div style={{ fontSize: '11px', fontWeight: 'bold', marginBottom: '12px', color: '#888' }}>VIRTUAL CAMERA</div>
@@ -497,6 +498,7 @@ export default function App() {
                                 <div style={rowStyle}><span>Use Interaction:</span><input id="chkUseInteraction" type="checkbox" /></div>
 
                                 <button id="btnRender" style={{ ...fullBtnStyle, background: '#10b981', color: '#fff', marginTop: '24px', border: 'none', padding: '12px' }}>Start Offline Render</button>
+                                <button id="btnExportDepth" style={{ ...fullBtnStyle, background: '#3b82f6', color: '#fff', marginTop: '8px', border: 'none', padding: '12px' }}>Download Depth Map (.f32)</button>
                             </div>
                         </div>
                     </TabContainer>

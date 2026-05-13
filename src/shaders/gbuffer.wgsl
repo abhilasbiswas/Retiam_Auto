@@ -3,7 +3,8 @@
     @location(0) pos: vec4<f32>,
     @location(1) normal: vec4<f32>,
     @location(2) albedo: vec4<f32>,
-    @location(3) motion: vec4<f32>, // changed to vec4
+    @location(3) motion: vec4<f32>,
+    @location(4) depth: f32,
 }
 
                 @vertex fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4<f32> {
@@ -33,6 +34,7 @@
     if (hit.hit) {
         out.pos = vec4<f32>(hit.point, hit.mat.transmission);
         out.normal = vec4<f32>(hit.normal, hit.mat.roughness);
+        out.depth = distance(hit.point, cam.pos.xyz);
         
         if (hit.mat.emStrength > 0.0) {
             out.albedo = vec4<f32>(hit.mat.emColor * hit.mat.emStrength, 1.0);
@@ -79,6 +81,7 @@
         out.normal = vec4<f32>(0.0);
         out.albedo = vec4<f32>(getSkyColor(ray), -1.0); 
         out.motion = vec4<f32>(0.0);
+        out.depth = 10000.0; // Far distance for sky
     }
     
     return out;

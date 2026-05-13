@@ -164,6 +164,8 @@ export class RenderEngine {
         this.gBufferNormal = this.device.createTexture({ size: [this.width, this.height, 1], format: 'rgba16float', usage: gBufferUsage });
         this.gBufferAlbedo = this.device.createTexture({ size: [this.width, this.height, 1], format: 'rgba16float', usage: gBufferUsage });
         this.gBufferMotion = this.device.createTexture({ size: [this.width, this.height, 1], format: 'rgba16float', usage: gBufferUsage });
+        this.gBufferDepth = this.device.createTexture({ size: [this.width, this.height, 1], format: 'r32float', usage: gBufferUsage });
+
         const reservoirSize = this.width * this.height * 48;
         this.reservoirA = this.device.createBuffer({ size: reservoirSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
         this.reservoirB = this.device.createBuffer({ size: reservoirSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
@@ -187,6 +189,8 @@ export class RenderEngine {
 
         this.oidnReadBuf = this.device.createBuffer({ size: numPixels * 16, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
         this.oidnTexture = this.device.createTexture({ size: [this.width, this.height, 1], format: 'rgba32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.STORAGE_BINDING });
+        
+        this.readDepthBuffer = this.device.createBuffer({ size: this.bytesPerRow * this.height, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
     }
 
     resize(newWidth, newHeight) {
@@ -292,13 +296,19 @@ export class RenderEngine {
                 { binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
                 { binding: 3, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
                 { binding: 4, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
-                { binding: 5, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'storage' } },
-                { binding: 6, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } }
+                { binding: 5, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
+                { binding: 6, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'storage' } },
+                { binding: 7, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } }
             ]
         });
 
         this.screenLayout = this.device.createBindGroupLayout({
-            entries: [{ binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } }, { binding: 1, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } }, { binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } }]
+            entries: [
+                { binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
+                { binding: 1, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
+                { binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
+                { binding: 3, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } }
+            ]
         });
 
         this.lbvhBgLayout = this.device.createBindGroupLayout({
@@ -312,7 +322,7 @@ export class RenderEngine {
         this.gBufferPipeline = await this.device.createRenderPipelineAsync({
             layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.bgLayout0] }),
             vertex: { module: gBufferModule, entryPoint: 'vs_main' },
-            fragment: { module: gBufferModule, entryPoint: 'fs_main', targets: [{ format: 'rgba32float' }, { format: 'rgba16float' }, { format: 'rgba16float' }, { format: 'rgba16float' }] },
+            fragment: { module: gBufferModule, entryPoint: 'fs_main', targets: [{ format: 'rgba32float' }, { format: 'rgba16float' }, { format: 'rgba16float' }, { format: 'rgba16float' }, { format: 'r32float' }] },
             primitive: { topology: 'triangle-list' }
         });
 
@@ -393,7 +403,8 @@ export class RenderEngine {
                 entries: [
                     { binding: 0, resource: historyTex.createView() }, { binding: 1, resource: this.gBufferPos.createView() },
                     { binding: 2, resource: this.gBufferNormal.createView() }, { binding: 3, resource: this.gBufferAlbedo.createView() },
-                    { binding: 4, resource: this.gBufferMotion.createView() }, { binding: 5, resource: { buffer: resCurr } }, { binding: 6, resource: { buffer: resPrev } }
+                    { binding: 4, resource: this.gBufferMotion.createView() }, { binding: 5, resource: this.gBufferDepth.createView() },
+                    { binding: 6, resource: { buffer: resCurr } }, { binding: 7, resource: { buffer: resPrev } }
                 ]
             });
         };
@@ -401,8 +412,8 @@ export class RenderEngine {
         this.bg1A = createRTBindGroup(this.texA, this.reservoirB, this.reservoirA);
         this.bg1B = createRTBindGroup(this.texB, this.reservoirA, this.reservoirB);
 
-        this.screenBgA = this.device.createBindGroup({ layout: this.screenLayout, entries: [{ binding: 0, resource: this.texA.createView() }, { binding: 1, resource: { buffer: this.postProcBuffer } }, { binding: 2, resource: this.oidnTexture.createView() }] });
-        this.screenBgB = this.device.createBindGroup({ layout: this.screenLayout, entries: [{ binding: 0, resource: this.texB.createView() }, { binding: 1, resource: { buffer: this.postProcBuffer } }, { binding: 2, resource: this.oidnTexture.createView() }] });
+        this.screenBgA = this.device.createBindGroup({ layout: this.screenLayout, entries: [{ binding: 0, resource: this.texA.createView() }, { binding: 1, resource: { buffer: this.postProcBuffer } }, { binding: 2, resource: this.oidnTexture.createView() }, { binding: 3, resource: this.gBufferDepth.createView() }] });
+        this.screenBgB = this.device.createBindGroup({ layout: this.screenLayout, entries: [{ binding: 0, resource: this.texB.createView() }, { binding: 1, resource: { buffer: this.postProcBuffer } }, { binding: 2, resource: this.oidnTexture.createView() }, { binding: 3, resource: this.gBufferDepth.createView() }] });
 
         this.lbvhBindGroup = this.device.createBindGroup({
             layout: this.lbvhBgLayout,
@@ -698,7 +709,8 @@ export class RenderEngine {
                 { view: this.gBufferPos.createView(), loadOp: 'clear', clearValue: { r: 0, g: 0, b: 0, a: 0 }, storeOp: 'store' },
                 { view: this.gBufferNormal.createView(), loadOp: 'clear', clearValue: { r: 0, g: 0, b: 0, a: 0 }, storeOp: 'store' },
                 { view: this.gBufferAlbedo.createView(), loadOp: 'clear', clearValue: { r: 0, g: 0, b: 0, a: 0 }, storeOp: 'store' },
-                { view: this.gBufferMotion.createView(), loadOp: 'clear', clearValue: { r: 0, g: 0, b: 0, a: 0 }, storeOp: 'store' }
+                { view: this.gBufferMotion.createView(), loadOp: 'clear', clearValue: { r: 0, g: 0, b: 0, a: 0 }, storeOp: 'store' },
+                { view: this.gBufferDepth.createView(), loadOp: 'clear', clearValue: { r: 0, g: 0, b: 0, a: 0 }, storeOp: 'store' }
             ]
         });
         gBufferPass.setPipeline(this.gBufferPipeline);
@@ -739,10 +751,25 @@ export class RenderEngine {
             screenPass.setPipeline(targetPipeline); screenPass.setBindGroup(0, finalBG);
             if (this.useScissor && this.tileRect) screenPass.setScissorRect(this.tileRect.x, this.tileRect.y, this.tileRect.width, this.tileRect.height);
             screenPass.draw(3, 1, 0, 0); screenPass.end();
-            if (isOffline) commandEncoder.copyTextureToBuffer({ texture: this.readTexture }, { buffer: this.readBuffer, bytesPerRow: this.bytesPerRow }, [this.width, this.height, 1]);
+            if (isOffline) {
+                commandEncoder.copyTextureToBuffer({ texture: this.readTexture }, { buffer: this.readBuffer, bytesPerRow: this.bytesPerRow }, [this.width, this.height, 1]);
+                commandEncoder.copyTextureToBuffer({ texture: this.gBufferDepth }, { buffer: this.readDepthBuffer, bytesPerRow: this.bytesPerRow }, [this.width, this.height, 1]);
+            }
         }
 
         this.device.queue.submit([commandEncoder.finish()]);
+    }
+
+    async getDepthData() {
+        await this.readDepthBuffer.mapAsync(GPUMapMode.READ);
+        const mapped = new Float32Array(this.readDepthBuffer.getMappedRange());
+        const data = new Float32Array(this.width * this.height);
+        const floatsPerRow = this.bytesPerRow / 4;
+        for (let y = 0; y < this.height; y++) {
+            data.set(mapped.subarray(y * floatsPerRow, y * floatsPerRow + this.width), y * this.width);
+        }
+        this.readDepthBuffer.unmap();
+        return data;
     }
 }
 

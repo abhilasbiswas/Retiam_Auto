@@ -5,8 +5,9 @@
                 @group(1) @binding(2) var gbNormal: texture_2d<f32>;
                 @group(1) @binding(3) var gbAlbedo: texture_2d<f32>;
                 @group(1) @binding(4) var gbMotion: texture_2d<f32>;
-                @group(1) @binding(5) var<storage, read_write> resCurr: array<Reservoir>;
-                @group(1) @binding(6) var<storage, read> resPrev: array<Reservoir>;
+                @group(1) @binding(5) var gbDepth: texture_2d<f32>;
+                @group(1) @binding(6) var<storage, read_write> resCurr: array<Reservoir>;
+                @group(1) @binding(7) var<storage, read> resPrev: array<Reservoir>;
 
                 fn trace_classic(initial_ray: Ray, rngState: ptr<function, u32>) -> vec3<f32> {
     var ray        = initial_ray;

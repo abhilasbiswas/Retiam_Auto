@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "gen-context": "ts-node tools/context_gen/context_generator.ts ./src"
+
   },
   "devDependencies": {
     "@types/node": "^25.5.2",
